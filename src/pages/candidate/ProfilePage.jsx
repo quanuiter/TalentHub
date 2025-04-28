@@ -37,7 +37,8 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import LinkIcon from '@mui/icons-material/Link';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import NotesIcon from '@mui/icons-material/Notes'; // Icon Ghi chú (có thể dùng cho mô tả kinh nghiệm)
+import ListItemIcon from '@mui/material/ListItemIcon'; // Import ListItemIcon
+import DescriptionIcon from '@mui/icons-material/Description'; // Icon Ghi chú (có thể dùng cho mô tả kinh nghiệm)
 
 function CandidateProfilePage() {
   const { authState, updateUserProfile } = useAuth();
@@ -65,7 +66,34 @@ function CandidateProfilePage() {
   const [deleteItemType, setDeleteItemType] = useState('');
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+// === STATE MỚI CHO UPLOAD CV ===
+    const [selectedFile, setSelectedFile] = useState(null); // Lưu file object được chọn
+    const [isUploadingCV, setIsUploadingCV] = useState(false); // Trạng thái đang upload
+    // === KẾT THÚC STATE MỚI ===
+  
+  // --- Giả lập hàm upload CV (Sau này thay bằng API) ---
+const uploadCVToServerMock = async (candidateId, file) => {
+    console.log(`Uploading CV (mock): User ${candidateId}, File: ${file.name}, Size: ${file.size}`);
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Giả lập độ trễ mạng
 
+    // Giả lập thành công hoặc lỗi (ví dụ lỗi nếu file quá lớn)
+    if (file.size > 5 * 1024 * 1024) { // Giả sử giới hạn 5MB
+        throw new Error("Dung lượng file CV không được vượt quá 5MB.");
+    }
+
+    // Giả lập kết quả trả về từ server
+    return {
+        success: true,
+        message: "Tải lên CV thành công!",
+        newCvData: { // Dữ liệu CV mới trả về (ví dụ)
+            id: `cv_${Date.now()}`,
+            fileName: file.name,
+            uploadDate: new Date().toISOString(),
+            url: '#' // URL giả lập
+        }
+    };
+};
+// --- Kết thúc hàm giả lập ---
   // Effect cập nhật editableProfileData khi bắt đầu sửa Personal Info
   useEffect(() => {
     if (currentUser && isEditingPersonalInfo) {
@@ -282,7 +310,66 @@ function CandidateProfilePage() {
         </Stack>
     </Paper>
   );
+  // === HANDLERS MỚI CHO UPLOAD CV ===
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Validate file type (ví dụ chỉ cho phép pdf, doc, docx)
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(file.type)) {
+           setSnackbar({ open: true, message: 'Loại file không hợp lệ. Chỉ chấp nhận .pdf, .doc, .docx.', severity: 'error' });
+           setSelectedFile(null);
+           event.target.value = null; // Reset input file
+           return;
+      }
+       // Validate file size (ví dụ < 5MB)
+       if (file.size > 5 * 1024 * 1024) {
+           setSnackbar({ open: true, message: 'Dung lượng file không được vượt quá 5MB.', severity: 'error' });
+            setSelectedFile(null);
+            event.target.value = null; // Reset input file
+           return;
+       }
+      setSelectedFile(file);
+      setSnackbar({ ...snackbar, open: false }); // Ẩn snackbar cũ nếu có
+    }
+  };
 
+  const handleCancelFileSelect = () => {
+    setSelectedFile(null);
+    // Reset input file để có thể chọn lại cùng file
+    const fileInput = document.getElementById('cvUploadInput');
+    if(fileInput) fileInput.value = null;
+  }
+
+  const handleUploadCV = async () => {
+    if (!selectedFile || !currentUser?.id) return;
+
+    setIsUploadingCV(true);
+    setSnackbar({ ...snackbar, open: false });
+
+    try {
+      const result = await uploadCVToServerMock(currentUser.id, selectedFile);
+      if (result.success && result.newCvData) {
+        // Cập nhật danh sách CV trong state (sau này nên gọi API để cập nhật context/refetch)
+        const updatedCVs = [...(currentUser.uploadedCVs || []), result.newCvData];
+        // Gọi hàm updateUserProfile giả lập để cập nhật context (nếu muốn)
+        await updateUserProfile({ uploadedCVs: updatedCVs });
+
+        setSnackbar({ open: true, message: result.message, severity: 'success' });
+        setSelectedFile(null); // Xóa file đã chọn sau khi upload thành công
+        const fileInput = document.getElementById('cvUploadInput');
+        if(fileInput) fileInput.value = null; // Reset input
+      } else {
+        setSnackbar({ open: true, message: result.message || 'Upload CV thất bại.', severity: 'error' });
+      }
+    } catch (err) {
+      console.error("Lỗi upload CV:", err);
+      setSnackbar({ open: true, message: err.message || 'Không thể tải lên CV.', severity: 'error' });
+    } finally {
+      setIsUploadingCV(false);
+    }
+  };
+  // === KẾT THÚC HANDLERS MỚI ===
   // --- JSX Render ---
   return (
     <Box>
@@ -589,46 +676,115 @@ function CandidateProfilePage() {
       </Paper>
 
       {/* --- Phần Quản lý CV (Cập nhật JSX) --- */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+           {/* --- Phần Quản lý CV (Cập nhật JSX) --- */}
+           <Paper sx={{ p: 3, mb: 3 }}>
+         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="h6">Quản lý CV</Typography>
-             {/* Nút Upload */}
+             {/* Nút "Chọn file" (ẩn input thật) */}
              <Button
-                variant="contained"
+                component="label" // Hoạt động như một label cho input ẩn
+                variant="outlined" // Đổi thành outlined cho đỡ rối
                 startIcon={<CloudUploadIcon />}
-                onClick={() => document.getElementById('cvUploadInput')?.click()}
                 size="small"
+                disabled={isUploadingCV || !!selectedFile} // Disable nếu đang upload hoặc đã chọn file
             >
-                Tải lên CV mới
+                Chọn file CV (.pdf, .doc, .docx)
+                <input
+                    type="file"
+                    id="cvUploadInput"
+                    hidden
+                    accept=".pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" // Giới hạn loại file
+                    onChange={handleFileSelect} // Gọi hàm xử lý khi chọn file
+                />
             </Button>
-            <input type="file" id="cvUploadInput" hidden onChange={(e) => console.log("Selected file:", e.target.files[0])} />
          </Box>
+
+         {/* Hiển thị file đã chọn và nút Upload/Hủy */}
+         {selectedFile && (
+             <Box sx={{
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'space-between', // Đẩy nút sang phải
+                 p: 1.5,
+                 border: '1px dashed',
+                 borderColor: 'primary.main',
+                 borderRadius: 1,
+                 mb: 2,
+                 bgcolor: 'action.hover'
+             }}>
+                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DescriptionIcon color="primary"/>
+                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        {selectedFile.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </Typography>
+                 </Box>
+                 <Stack direction="row" spacing={1}>
+                      <Tooltip title="Hủy chọn file này">
+                        <IconButton size="small" onClick={handleCancelFileSelect} disabled={isUploadingCV} color="warning">
+                             <CancelScheduleSendIcon fontSize="small"/>
+                        </IconButton>
+                      </Tooltip>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={isUploadingCV ? <CircularProgress size={16} color="inherit" /> : <UploadFileIcon />}
+                        onClick={handleUploadCV}
+                        disabled={isUploadingCV}
+                    >
+                        Tải lên
+                    </Button>
+                 </Stack>
+             </Box>
+         )}
+
          <Divider sx={{ my: 2 }}/>
+
+         {/* Danh sách CV đã tải lên */}
+         <Typography variant="subtitle1" gutterBottom>CV đã tải lên:</Typography>
          <List dense>
             {currentUser.uploadedCVs && currentUser.uploadedCVs.length > 0 ? (
                 currentUser.uploadedCVs.map(cv => (
                     <ListItem
                         key={cv.id}
                         secondaryAction={
-                            <>
-                                <Tooltip title="Tải xuống"><IconButton edge="end" aria-label="download" href={cv.url} target="_blank"><DownloadIcon /></IconButton></Tooltip>
-                                {/* Nút Delete gọi hàm mở Dialog Confirm */}
-                                <Tooltip title="Xóa"><IconButton edge="end" aria-label="delete" onClick={() => handleOpenDeleteDialog(cv.id, 'cv')} disabled={loading}><DeleteIcon /></IconButton></Tooltip>
-                            </>
+                            <Stack direction="row" spacing={0.5}> {/* Dùng Stack cho các nút */}
+                                <Tooltip title="Tải xuống">
+                                    {/* Thêm span để tooltip hoạt động nếu IconButton bị disable */}
+                                    <span>
+                                        <IconButton edge="end" aria-label="download" href={cv.url} target="_blank" disabled={!cv.url || cv.url === '#'}>
+                                            <DownloadIcon />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                                <Tooltip title="Xóa CV này">
+                                    <span>
+                                        <IconButton edge="end" aria-label="delete" onClick={() => handleOpenDeleteDialog(cv.id, 'cv')} disabled={loading || isUploadingCV}>
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                            </Stack>
                         }
-                        sx={{ borderBottom: '1px solid #f0f0f0', '&:last-child': { borderBottom: 0 } }} // Bỏ border dòng cuối
+                        sx={{ borderBottom: '1px solid #f0f0f0', '&:last-child': { borderBottom: 0 }, pr: 12 /* Tăng padding phải để nút không đè chữ */ }}
                     >
+                         {/* Thêm icon file */}
+                        <ListItemIcon sx={{ minWidth: 32 /* Giảm khoảng cách */ }}>
+                            <DescriptionIcon fontSize="small" color="action"/>
+                        </ListItemIcon>
                         <ListItemText
                             primary={cv.fileName}
-                            secondary={`Tải lên ngày: ${new Date(cv.uploadDate).toLocaleDateString('vi-VN')}`}
+                            secondary={`Tải lên: ${new Date(cv.uploadDate).toLocaleDateString('vi-VN')}`}
                         />
                     </ListItem>
                 ))
             ) : (
-                 <Typography variant="body2">Bạn chưa tải lên CV nào.</Typography>
+                 <Typography variant="body2" color="text.secondary">Bạn chưa tải lên CV nào.</Typography>
             )}
          </List>
-         <Typography variant="body2" color="text.secondary" sx={{mt:2}}>(Chức năng Upload/Download CV cần xử lý Backend)</Typography>
+         {/* <Typography variant="body2" color="text.secondary" sx={{mt:2}}>(Chức năng Upload/Download CV cần xử lý Backend)</Typography> */}
       </Paper>
 
       {/* Dialog Xác nhận Xóa (Cập nhật contentText) */}

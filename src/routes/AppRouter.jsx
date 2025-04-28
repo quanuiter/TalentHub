@@ -11,8 +11,8 @@ import JobListingsPage from '../pages/JobListingsPage';
 import JobDetailPage from '../pages/JobDetailPage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
-import NotFoundPage from '../pages/NotFoundPage';
-
+import NotFoundPage from '../pages/NotFoundPage'; 
+import CompanyDetailPage from '../pages/CompanyDetailPage'; // <<< THÊM IMPORT NÀY
 // Import Candidate Pages (Tạo các file này ở bước sau)
 import CandidateDashboardPage from '../pages/candidate/DashboardPage';
 import CandidateProfilePage from '../pages/candidate/ProfilePage';
@@ -31,7 +31,7 @@ import ApplicantsPage from '../pages/employer/ApplicantsPage';
 import ManageTestsPage from '../pages/employer/ManageTestsPage';
 import StatisticsPage from '../pages/employer/StatisticsPage';
 // import StaffManagementPage from '../pages/employer/StaffManagementPage'; // Sẽ xóa ở bước sau
-import EmployerCompanyProfilePage from '../pages/employer/CompanyProfilePage';
+import CompanyProfilePage from '../pages/employer/CompanyProfilePage';
 import EmployerSettingsPage from '../pages/employer/SettingsPage';
 
 function AppRouter() {
@@ -43,6 +43,7 @@ function AppRouter() {
           <Route index element={<HomePage />} />
           <Route path="jobs" element={<JobListingsPage />} />
           <Route path="jobs/:jobId" element={<JobDetailPage />} />
+          <Route path="companies/:companyId" element={<CompanyDetailPage />} />
           {/* Thêm các trang public khác nếu cần */}
         </Route>
 
@@ -80,6 +81,7 @@ function AppRouter() {
            <Route element={<DashboardLayout />}>
             <Route path="dashboard" element={<EmployerDashboardPage />} />
             <Route path="post-job" element={<PostJobPage />} />
+            <Route path="edit-job/:jobId" element={<PostJobPage />} />
             <Route path="manage-jobs" element={<ManageJobsPage />} />
             {/* Route xem ứng viên có thể lồng vào manage-jobs hoặc để riêng */}
             <Route path="applicants" element={<ApplicantsPage />} />
@@ -87,10 +89,15 @@ function AppRouter() {
              {/* <Route path="manage-jobs/:jobId/applicants" element={<JobApplicantsPage />} /> */}
             <Route path="manage-tests" element={<ManageTestsPage />} />
             <Route path="statistics" element={<StatisticsPage />} />
-            <Route path="company-profile" element={<EmployerCompanyProfilePage />} />
+            <Route path="company-profile" element={<CompanyProfilePage />} />
             <Route path="settings" element={<EmployerSettingsPage />} />
             {/* Redirect từ /employer về /employer/dashboard */}
              <Route index element={<Navigate to="dashboard" replace />} />
+             <Route path="post-job" element={<PostJobPage />} />
+             <Route path="manage-jobs" element={<ManageJobsPage />} />
+             <Route path="applicants" element={<ApplicantsPage />} />
+             <Route path="manage-tests" element={<ManageTestsPage />} />
+             <Route path="jobs/:jobId/applicants" element={<ApplicantsPage />} />
           </Route>
         </Route>
  

@@ -30,6 +30,8 @@ const sidebarItems = [
   { text: 'Quản lý ứng viên', icon: <PeopleIcon />, path: '/employer/applicants' }, // Có thể link đến manage-jobs trước
   { text: 'Quản lý Bài Test', icon: <AssessmentIcon />, path: '/employer/manage-tests' },
   { text: 'Thống kê', icon: <QueryStatsIcon />, path: '/employer/statistics' },
+  //{ text: 'Cài đặt', icon: <SettingsIcon />, path: '/employer/settings' },
+  //{ text: 'Quản lý tài khoản', icon: <ManageAccountsIcon />, path: '/employer/manage-account' },
 ];
 
 const bottomItems = [

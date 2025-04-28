@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
         success = true;
         console.log("[AuthContext] Candidate identified"); // Log khi xác định candidate
     } else if (email === "employer@test.com" && password === "password") {
-        loggedInUser = { /* ... */ role: 'employer', companyName: 'Test Company' };
+        loggedInUser = {id:'ntd001', role: 'employer', companyId: 'comp001', companyName: 'Test Company' };
         success = true;
         console.log("[AuthContext] Employer identified"); // Log khi xác định employer
     }

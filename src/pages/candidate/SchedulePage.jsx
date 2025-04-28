@@ -4,7 +4,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchScheduleEvents, confirmSchedule } from '../../data/mockSchedule'; // Import hàm fetch và confirm
+import { fetchScheduleEvents, confirmSchedule, declineSchedule } from '../../data/mockSchedule';
 
 // Import MUI components
 import Box from '@mui/material/Box';
@@ -45,6 +45,7 @@ const getStatusInfo = (status) => {
      switch (status?.toLowerCase()) {
         case 'đã xác nhận': return { icon: <CheckCircleIcon fontSize="small" color="success"/>, color: 'success' };
         case 'chờ xác nhận': return { icon: <HelpOutlineIcon fontSize="small" color="warning"/>, color: 'warning' };
+        case 'đã từ chối': return { icon: <CancelIcon fontSize="small" />, color: 'error' };
         case 'đã hủy': return { icon: <CancelIcon fontSize="small" color="error"/>, color: 'error' };
         case 'đã hoàn thành': return { icon: <CheckCircleIcon fontSize="small" color="disabled"/>, color: 'default' }; // Màu xám
         default: return { icon: <EventIcon fontSize="small"/>, color: 'default' };
@@ -59,7 +60,7 @@ function CandidateSchedulePage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [confirmingId, setConfirmingId] = useState(null); // State để biết đang xác nhận event nào
-
+  const [decliningId, setDecliningId] = useState(null);
   const loadEvents = async () => {
     if (!authState.user?.id) return;
     setLoading(true);
@@ -107,7 +108,31 @@ function CandidateSchedulePage() {
     if (reason === 'clickaway') return;
     setSnackbarOpen(false);
   };
-
+  // --- THÊM HÀM NÀY ---
+  const handleDecline = async (eventId) => {
+    if (!authState.user?.id) return;
+    setDecliningId(eventId); // Đánh dấu đang xử lý
+    setSnackbarMessage(''); // Xóa thông báo cũ
+    try {
+        const success = await declineSchedule(authState.user.id, eventId);
+        if (success) {
+            setSnackbarMessage('Đã từ chối lịch hẹn.');
+            // Cập nhật lại state để thay đổi status trên UI ngay lập tức
+            setEvents(prevEvents => prevEvents.map(e =>
+                e.eventId === eventId ? { ...e, status: 'Đã từ chối' } : e
+            ));
+        } else {
+            setSnackbarMessage('Lỗi! Không thể từ chối lịch hẹn.');
+        }
+    } catch (err) {
+        console.error("Lỗi khi từ chối:", err);
+        setSnackbarMessage('Lỗi! Không thể từ chối lịch hẹn.');
+    } finally {
+        setSnackbarOpen(true);
+        setDecliningId(null); // Hoàn thành xử lý
+    }
+};
+// --- KẾT THÚC THÊM HÀM ---
   return (
     <Box>
       <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
@@ -170,18 +195,33 @@ function CandidateSchedulePage() {
                             sx={{ mb: 1 }}
                         />
                         {isConfirmable && (
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: '100%'}}>
+                            {/* Nút Xác nhận */}
                             <Button
                                 size="small"
                                 variant="contained"
                                 color="success"
                                 onClick={() => handleConfirm(event.eventId)}
-                                disabled={confirmingId === event.eventId} // Disable khi đang xử lý
+                                disabled={confirmingId === event.eventId || decliningId === event.eventId}
                                 startIcon={confirmingId === event.eventId ? <CircularProgress size={16} color="inherit"/> : <CheckCircleIcon />}
-                                fullWidth // Cho nút chiếm hết chiều rộng trên mobile
+                                fullWidth
                             >
                                 Xác nhận
                             </Button>
-                        )}
+                            {/* Nút Từ chối */}
+                            <Button
+                              size="small"
+                              variant="outlined" // Kiểu outlined cho khác biệt
+                              color="error"
+                              onClick={() => handleDecline(event.eventId)} // Gọi hàm handleDecline
+                              disabled={confirmingId === event.eventId || decliningId === event.eventId} // Disable khi đang xử lý nút khác
+                              startIcon={decliningId === event.eventId ? <CircularProgress size={16} color="inherit"/> : <CancelIcon />} // Icon và loading
+                              fullWidth // Luôn rộng hết
+                          >
+                              Từ chối
+                          </Button>
+                        </Stack>
+                    )}
                         {/* Thêm các nút khác nếu cần: Hủy lịch, Xem chi tiết job... */}
                          {/* <Button size="small" variant='text' component={RouterLink} to={`/jobs/${event.jobId}`} sx={{mt: isConfirmable ? 1:0}}>Xem Job</Button> */}
                     </Grid>

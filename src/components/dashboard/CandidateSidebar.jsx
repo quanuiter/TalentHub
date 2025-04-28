@@ -34,7 +34,7 @@ function CandidateSidebar() {
   };
 
   return (
-    <Box sx={{ width: 250, borderRight: '1px solid rgba(0, 0, 0, 0.12)' }}> {/* Width và đường viền phải */}
+    <Box sx={{ width: 200, borderRight: '1px solid rgba(0, 0, 0, 0.12)', minWidth: 200, }}> {/* Width và đường viền phải */}
       <List component="nav">
         {sidebarItems.map((item) => (
           <ListItem key={item.text} disablePadding>
