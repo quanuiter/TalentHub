@@ -19,38 +19,21 @@ import FormControl from "@mui/material/FormControl"
 import InputLabel from "@mui/material/InputLabel"
 import Button from "@mui/material/Button"
 import Pagination from "@mui/material/Pagination"
-import Divider from "@mui/material/Divider"
-import Accordion from "@mui/material/Accordion"
-import AccordionSummary from "@mui/material/AccordionSummary"
-import AccordionDetails from "@mui/material/AccordionDetails"
-import FormGroup from "@mui/material/FormGroup"
-import FormControlLabel from "@mui/material/FormControlLabel"
-import Checkbox from "@mui/material/Checkbox"
-import Stack from "@mui/material/Stack"
+import Checkbox from "@mui/material/Checkbox" // Vẫn dùng cho MenuItem
 import InputAdornment from "@mui/material/InputAdornment"
 import Container from "@mui/material/Container"
 import Alert from "@mui/material/Alert"
-import Drawer from "@mui/material/Drawer"
-import IconButton from "@mui/material/IconButton"
-import Chip from "@mui/material/Chip"
-import Badge from "@mui/material/Badge"
-import { alpha } from "@mui/material/styles"
+import OutlinedInput from "@mui/material/OutlinedInput" // Dùng cho Select multiple
+import Chip from "@mui/material/Chip" // Dùng để hiển thị giá trị đã chọn trong Select
+import ListItemText from "@mui/material/ListItemText" // Dùng trong Select multiple
 
 // Icons
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import FilterListIcon from "@mui/icons-material/FilterList"
 import SearchIcon from "@mui/icons-material/Search"
 import ClearAllIcon from "@mui/icons-material/ClearAll"
 import FindInPageOutlinedIcon from "@mui/icons-material/FindInPageOutlined"
-import CloseIcon from "@mui/icons-material/Close"
 import SortIcon from "@mui/icons-material/Sort"
-import TuneIcon from "@mui/icons-material/Tune"
-import LocationOnIcon from "@mui/icons-material/LocationOn"
-import WorkIcon from "@mui/icons-material/Work"
-import SchoolIcon from "@mui/icons-material/School"
-import PaidIcon from "@mui/icons-material/Paid"
 
-// Mock data for filter options (giữ nguyên)
+// Mock data for filter options (vẫn cần để hiển thị các lựa chọn filter)
 const mockJobTypes = ["Full-time", "Part-time", "Hợp đồng", "Thực tập", "Remote", "Freelance"]
 const mockLocations = ["TP. Hồ Chí Minh", "Hà Nội", "Đà Nẵng", "Remote", "Khác"]
 const mockExperiences = ["Chưa có kinh nghiệm", "Dưới 1 năm", "1 năm", "2 năm", "3 năm", "4 năm", "5 năm", "Trên 5 năm"]
@@ -64,6 +47,18 @@ const mockSalaryRanges = [
   { value: "thoathuan", label: "Thương lượng" },
 ]
 
+// ITEM_HEIGHT và ITEM_PADDING_TOP dùng để tính chiều cao Menu của Select multiple
+const ITEM_HEIGHT = 56 // Increased from 48
+const ITEM_PADDING_TOP = 8
+const MenuProps = {
+  PaperProps: {
+    style: {
+      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
+      width: 280, // Increased from 250
+    },
+  },
+}
+
 function useQuery() {
   return new URLSearchParams(useLocation().search)
 }
@@ -74,8 +69,8 @@ function JobListingsPage() {
   const query = useQuery()
 
   // --- STATE ---
-  const [allJobs, setAllJobs] = useState([]) // State lưu tất cả jobs gốc từ API
-  const [displayJobs, setDisplayJobs] = useState([]) // State lưu jobs đã lọc/sắp xếp để hiển thị
+  const [allJobs, setAllJobs] = useState([])
+  const [displayJobs, setDisplayJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filters, setFilters] = useState({
@@ -87,16 +82,7 @@ function JobListingsPage() {
   })
   const [sortBy, setSortBy] = useState("newest")
   const [currentPage, setCurrentPage] = useState(1)
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const jobsPerPage = 9
-
-  // Calculate total active filters for badge
-  const totalActiveFilters =
-    filters.locations.length +
-    filters.jobTypes.length +
-    filters.experienceLevels.length +
-    filters.salaryRanges.length +
-    (filters.keyword ? 1 : 0)
 
   // --- Hàm cập nhật Query Params ---
   const updateQueryParams = useCallback(
@@ -120,14 +106,13 @@ function JobListingsPage() {
     }
     // TODO: Hoàn thiện logic kiểm tra các khoảng lương số
     console.warn("Logic checkSalaryRange client-side chưa hoàn thiện!")
-    // Tạm thời trả về true nếu có chọn khoảng lương số nhưng chưa xử lý được
     return selectedRanges.some((range) => range !== "thoathuan")
   }, [])
 
   // --- Hàm áp dụng bộ lọc và sắp xếp (Xử lý phía Client) ---
   const applyFiltersAndSort = useCallback(() => {
     console.log("Applying filters/sort (Client-side):", filters, sortBy)
-    let filtered = [...allJobs] // Bắt đầu với tất cả jobs gốc
+    let filtered = [...allJobs]
 
     // Lọc theo keyword
     if (filters.keyword) {
@@ -162,16 +147,14 @@ function JobListingsPage() {
 
     // Sắp xếp
     if (sortBy === "newest") {
-      // Sử dụng createdAt nếu API trả về, nếu không thì dùng datePosted
       filtered.sort((a, b) => new Date(b.createdAt || b.datePosted) - new Date(a.createdAt || a.datePosted))
     }
-    // Thêm các kiểu sắp xếp khác nếu cần
 
     console.log("Filtered/Sorted jobs count:", filtered.length)
-    setDisplayJobs(filtered) // Cập nhật state để hiển thị
-    setCurrentPage(1) // Luôn reset về trang 1 khi lọc/sắp xếp lại
+    setDisplayJobs(filtered)
+    setCurrentPage(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allJobs, filters, sortBy, checkSalaryRange]) // Thêm checkSalaryRange vào dependencies
+  }, [allJobs, filters, sortBy, checkSalaryRange])
 
   // --- useEffect: Load jobs từ API khi component mount ---
   useEffect(() => {
@@ -181,15 +164,12 @@ function JobListingsPage() {
       try {
         const response = await apiService.getPublicJobs()
         if (response && Array.isArray(response.data)) {
-          console.log("Jobs fetched from API:", response.data)
-          setAllJobs(response.data) // Lưu dữ liệu gốc từ API vào allJobs
+          setAllJobs(response.data)
         } else {
-          console.error("API response is not an array:", response)
           setAllJobs([])
           setError("Dữ liệu việc làm trả về không hợp lệ.")
         }
       } catch (err) {
-        console.error("Lỗi tải jobs từ API:", err)
         const errorMsg = err.response?.data?.message || err.message || "Không thể tải danh sách việc làm."
         setError(errorMsg)
         setAllJobs([])
@@ -202,415 +182,538 @@ function JobListingsPage() {
 
   // --- useEffect: Áp dụng filter/sort khi allJobs, filters, hoặc sortBy thay đổi ---
   useEffect(() => {
-    // Chỉ chạy applyFiltersAndSort khi đã có dữ liệu trong allJobs
     applyFiltersAndSort()
-  }, [allJobs, filters, sortBy, applyFiltersAndSort]) // Phụ thuộc vào các state này
+  }, [allJobs, filters, sortBy, applyFiltersAndSort])
 
-  // --- Handlers cho Bộ lọc ---
+  // --- Handlers ---
   const handleFilterChange = (event) => {
     const { name, value } = event.target
     setFilters((prevFilters) => ({ ...prevFilters, [name]: value }))
-    // Không cần gọi applyFiltersAndSort ở đây, useEffect sẽ tự xử lý
+    // Không cập nhật URL ngay lập tức, đợi nhấn nút Tìm kiếm (nếu có) hoặc để useEffect tự xử lý
   }
-  const handleCheckboxChange = (event) => {
-    const { name, value, checked } = event.target
+
+  const handleMultiSelectChange = (event) => {
+    const { name, value } = event.target
     setFilters((prevFilters) => ({
       ...prevFilters,
-      [name]: checked ? [...prevFilters[name], value] : prevFilters[name].filter((item) => item !== value),
+      [name]: typeof value === "string" ? value.split(",") : value,
     }))
-    // Không cần gọi applyFiltersAndSort ở đây, useEffect sẽ tự xử lý
   }
 
-  // Handler cho nút "Áp dụng bộ lọc" (Cập nhật URL)
-  const handleApplyFiltersClick = () => {
-    // useEffect đã tự động lọc/sort rồi, nút này chỉ cần cập nhật URL
-    updateQueryParams(filters)
-    setMobileFilterOpen(false) // Close mobile filter drawer after applying
-  }
-
-  // Handler cho nút "Xóa bộ lọc"
   const handleClearFilters = () => {
     const clearedFilters = { keyword: "", locations: [], jobTypes: [], experienceLevels: [], salaryRanges: [] }
     setFilters(clearedFilters)
-    // useEffect sẽ tự động áp dụng lại filter trống
-    updateQueryParams(clearedFilters)
+    updateQueryParams(clearedFilters) // Reset URL
   }
 
-  // Handler cho thay đổi sắp xếp
   const handleSortChange = (event) => {
     setSortBy(event.target.value)
-    // useEffect sẽ tự động sắp xếp lại
   }
 
-  // Handler cho thay đổi trang
   const handlePageChange = (event, value) => {
     setCurrentPage(value)
     window.scrollTo(0, 0)
   }
 
-  // Tính toán jobs cho trang hiện tại và tổng số trang (dựa trên displayJobs)
+  // --- Tính toán jobs cho trang hiện tại ---
   const indexOfLastJob = currentPage * jobsPerPage
   const indexOfFirstJob = indexOfLastJob - jobsPerPage
   const currentJobs = displayJobs.slice(indexOfFirstJob, indexOfLastJob)
   const pageCount = Math.ceil(displayJobs.length / jobsPerPage)
 
-  // --- Component Nội dung Bộ lọc (Tách ra để dùng lại cho Mobile Drawer) ---
-  const FilterContent = () => (
-    <>
-      {/* Header cho mobile drawer */}
-      <Box
-        sx={{
-          display: { xs: "flex", md: "none" }, // Only show on mobile
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 2,
-          pb: 1,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">
-          Bộ lọc
-        </Typography>
-        <IconButton onClick={() => setMobileFilterOpen(false)} size="small">
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      {/* Title cho desktop sidebar */}
-      <Typography
-        variant="h6"
-        gutterBottom
-        sx={{
-          display: { xs: "none", md: "flex" }, // Only show on desktop
-          alignItems: "center",
-          fontWeight: "bold",
-          color: "primary.main",
-          mb: 1,
-        }}
-      >
-        <FilterListIcon sx={{ mr: 1 }} /> Bộ lọc
-      </Typography>
-      <Divider sx={{ mb: 2, display: { xs: "none", md: "block" } }} />
-
-      {/* Nút Áp dụng / Xóa */}
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 2 }}>
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handleApplyFiltersClick} // Apply và đóng drawer
-          startIcon={<SearchIcon />}
-          sx={{ borderRadius: "8px", py: 1, fontWeight: 500 }}
-        >
-          Áp dụng
-        </Button>
-        <Button
-          variant="outlined"
-          fullWidth
-          onClick={handleClearFilters}
-          startIcon={<ClearAllIcon />}
-          sx={{ borderRadius: "8px", py: 1 }}
-        >
-          Xóa bộ lọc
-        </Button>
-      </Stack>
-
-      {/* Bộ lọc Keyword */}
-      <TextField
-        fullWidth
-        label="Từ khóa"
-        name="keyword"
-        value={filters.keyword}
-        onChange={handleFilterChange}
-        size="small"
-        sx={{ mb: 2 }}
-        InputProps={{
-          endAdornment: (
-            <InputAdornment position="end">
-              <SearchIcon color="action" />
-            </InputAdornment>
-          ),
-          sx: { borderRadius: "8px" },
-        }}
-      />
-      <Divider sx={{ mb: 2 }} />
-
-      {/* Các Accordion filter */}
-      {[
-        {
-          title: "Địa điểm",
-          icon: <LocationOnIcon sx={{ mr: 1, color: "primary.main", fontSize: "1.2rem" }} />,
-          items: mockLocations,
-          filterKey: "locations",
-          defaultExpanded: true,
-        },
-        {
-          title: "Loại hình công việc",
-          icon: <WorkIcon sx={{ mr: 1, color: "primary.main", fontSize: "1.2rem" }} />,
-          items: mockJobTypes,
-          filterKey: "jobTypes",
-        },
-        {
-          title: "Kinh nghiệm",
-          icon: <SchoolIcon sx={{ mr: 1, color: "primary.main", fontSize: "1.2rem" }} />,
-          items: mockExperiences,
-          filterKey: "experienceLevels",
-        },
-        {
-          title: "Mức lương",
-          icon: <PaidIcon sx={{ mr: 1, color: "primary.main", fontSize: "1.2rem" }} />,
-          items: mockSalaryRanges,
-          filterKey: "salaryRanges",
-          isSalary: true,
-        },
-      ].map((filterGroup) => (
-        <Accordion
-          key={filterGroup.filterKey}
-          defaultExpanded={filterGroup.defaultExpanded || false}
-          elevation={0}
-          disableGutters // Remove spacing between accordions
-          sx={{ "&:before": { display: "none" }, bgcolor: "transparent" /* Transparent background */ }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon />}
-            sx={{
-              p: 0, // Remove padding
-              minHeight: "auto", // Adjust height
-              "& .MuiAccordionSummary-content": { my: 1 }, // Margin for content
-              "&:hover": { bgcolor: alpha("#1976d2", 0.04) },
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", width: "100%" }}>
-              {filterGroup.icon}
-              <Typography variant="subtitle1" fontWeight="medium">
-                {filterGroup.title}
-              </Typography>
-              {/* Display count of selected items */}
-              {filters[filterGroup.filterKey].length > 0 && (
-                <Chip
-                  label={filters[filterGroup.filterKey].length}
-                  size="small"
-                  sx={{ ml: "auto", mr: 1, height: 20, fontSize: "0.7rem" }}
-                />
-              )}
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails
-            sx={{
-              maxHeight: 200,
-              overflowY: "auto",
-              p: 1,
-              pt: 0,
-              borderTop: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <FormGroup>
-              {filterGroup.items.map((item) => {
-                const value = filterGroup.isSalary ? item.value : item
-                const label = filterGroup.isSalary ? item.label : item
-                return (
-                  <FormControlLabel
-                    key={value}
-                    control={
-                      <Checkbox
-                        checked={filters[filterGroup.filterKey].includes(value)}
-                        onChange={handleCheckboxChange}
-                        name={filterGroup.filterKey}
-                        value={value}
-                        size="small"
-                        color="primary"
-                      />
-                    }
-                    label={label}
-                    sx={{ mb: 0 }} // Reduce margin bottom
-                  />
-                )
-              })}
-            </FormGroup>
-          </AccordionDetails>
-        </Accordion>
-      ))}
-    </>
-  )
-
   // --- Render ---
   return (
-    <Container maxWidth="lg" sx={{ mt: 3, mb: 5 }}>
-      {/* Mobile Filter Drawer */}
-      <Drawer
-        anchor="left"
-        open={mobileFilterOpen}
-        onClose={() => setMobileFilterOpen(false)}
-        sx={{
-          "& .MuiDrawer-paper": {
-            width: "85%",
-            maxWidth: "320px",
-            p: 2,
-            boxSizing: "border-box",
-          },
-        }}
-      >
-        <FilterContent />
-      </Drawer>
-
-      {/* Mobile Filter & Sort Controls */}
-      <Box
-        sx={{
-          display: { xs: "flex", md: "none" },
-          mb: 2,
-          gap: 1,
-        }}
-      >
-        <Button
-          variant="outlined"
-          fullWidth
-          startIcon={<TuneIcon />}
-          onClick={() => setMobileFilterOpen(true)}
-          sx={{
-            borderRadius: "8px",
-            py: 1,
-            justifyContent: "flex-start",
-            borderColor: "divider",
-          }}
-        >
-          <Badge
-            badgeContent={totalActiveFilters}
-            color="primary"
-            sx={{ "& .MuiBadge-badge": { fontSize: "0.7rem", transform: "scale(0.9) translate(50%, -50%)" } }} // Adjust badge
-          >
-            Bộ lọc
-          </Badge>
-        </Button>
-
-        <FormControl variant="outlined" size="small" sx={{ minWidth: 120, flexGrow: 1 }}>
-          <InputLabel>Sắp xếp</InputLabel>
-          <Select
-            value={sortBy}
-            onChange={handleSortChange}
-            label="Sắp xếp"
-            startAdornment={<SortIcon sx={{ mr: 0.5, ml: -0.5, color: "action.active" }} />}
-            sx={{ borderRadius: "8px" }}
-          >
-            <MenuItem value="newest">Mới nhất</MenuItem>
-          </Select>
-        </FormControl>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 6 }}>
+      {/* === TIÊU ĐỀ TRANG === */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" fontWeight="700" color="primary.main" gutterBottom>
+          Khám phá việc làm
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Tìm kiếm việc làm phù hợp với kỹ năng và sở thích của bạn
+        </Typography>
       </Box>
-
-      {/* Active Filters Display (Mobile) */}
-      {totalActiveFilters > 0 && (
-        <Box
-          sx={{
-            display: { xs: "flex", md: "none" },
-            flexWrap: "wrap",
-            gap: 1,
-            mb: 2,
-          }}
-        >
-          {filters.keyword && (
-            <Chip
-              label={`Từ khóa: ${filters.keyword}`}
-              onDelete={() => setFilters((prev) => ({ ...prev, keyword: "" }))}
+      {/* === THANH FILTER NGANG === */}
+      <Paper
+        elevation={2}
+        sx={{
+          p: 3,
+          mb: 4,
+          borderRadius: "16px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
+          background: "linear-gradient(to right, #f9f9ff, #ffffff)",
+        }}
+      >
+        <Grid container spacing={3} alignItems="center">
+          {/* Keyword Search */}
+          <Grid item xs={12} sm={6} md={4} lg={2.4}>
+            <TextField
+              fullWidth
+              label="Từ khóa tìm kiếm"
+              name="keyword"
+              value={filters.keyword}
+              onChange={handleFilterChange}
               size="small"
+              variant="outlined"
+              InputLabelProps={{
+                sx: {
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                },
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="primary" />
+                  </InputAdornment>
+                ),
+                sx: {
+                  borderRadius: "10px",
+                  "&:hover": {
+                    boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                  },
+                  "&.Mui-focused": {
+                    boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                  },
+                },
+              }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  "& fieldset": {
+                    borderColor: "rgba(0, 0, 0, 0.15)",
+                  },
+                },
+              }}
             />
-          )}
+          </Grid>
 
-          {filters.locations.map((loc) => (
-            <Chip
-              key={`loc-${loc}`}
-              label={loc}
-              onDelete={() =>
-                setFilters((prev) => ({
-                  ...prev,
-                  locations: prev.locations.filter((l) => l !== loc),
-                }))
-              }
-              size="small"
-            />
-          ))}
+          {/* Location Select */}
+          <Grid item xs={12} sm={6} md={4} lg={2.4}>
+            <FormControl fullWidth size="small">
+              <InputLabel
+                id="location-filter-label"
+                sx={{
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                  padding: "0 8px 0 0", // Thêm padding bên phải
+                  backgroundColor: "white", // Đảm bảo nền trắng để text hiển thị rõ
+                  borderRadius: "4px",
+                }}
+              >
+                Địa điểm
+              </InputLabel>
+              <Select
+                labelId="location-filter-label"
+                multiple
+                value={filters.locations}
+                onChange={handleMultiSelectChange}
+                input={
+                  <OutlinedInput
+                    label="Địa điểm"
+                    sx={{
+                      width: "7em",
+                      borderRadius: "10px",
+                      "&:hover": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                      },
+                      "&.Mui-focused": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                      },
+                    }}
+                  />
+                }
+                name="locations"
+                renderValue={(selected) => (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {selected.map((value) => (
+                      <Chip
+                        key={value}
+                        label={value}
+                        size="small"
+                        sx={{
+                          background: "rgba(25, 118, 210, 0.08)",
+                          borderRadius: "6px",
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+                MenuProps={MenuProps}
+              >
+                {mockLocations.map((location) => (
+                  <MenuItem
+                    key={location}
+                    value={location}
+                    sx={{
+                      py: 1.2, // Increased padding
+                      "&:hover": { backgroundColor: "rgba(25, 118, 210, 0.08)" },
+                    }}
+                  >
+                    <Checkbox
+                      checked={filters.locations.indexOf(location) > -1}
+                      size="medium" // Changed from small
+                      color="primary"
+                    />
+                    <ListItemText
+                      primary={location}
+                      primaryTypographyProps={{
+                        fontSize: "0.95rem",
+                        fontWeight: 500,
+                      }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-          {filters.jobTypes.map((type) => (
-            <Chip
-              key={`type-${type}`}
-              label={type}
-              onDelete={() =>
-                setFilters((prev) => ({
-                  ...prev,
-                  jobTypes: prev.jobTypes.filter((t) => t !== type),
-                }))
-              }
-              size="small"
-            />
-          ))}
+          {/* Job Type Select */}
+          <Grid item xs={12} sm={6} md={4} lg={2.4}>
+            <FormControl fullWidth size="small">
+              <InputLabel
+                id="jobtype-filter-label"
+                sx={{
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                  padding: "0 8px 0 0", // Thêm padding bên phải
+                  backgroundColor: "white", // Đảm bảo nền trắng để text hiển thị rõ
+                  borderRadius: "4px",
+                }}
+              >
+                Loại hình
+              </InputLabel>
+              <Select
+                labelId="jobtype-filter-label"
+                multiple
+                value={filters.jobTypes}
+                onChange={handleMultiSelectChange}
+                input={
+                  <OutlinedInput
+                    label="Loại hình"
+                    sx={{
+                      width: "7.3em",
+                      borderRadius: "10px",
+                      "&:hover": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                      },
+                      "&.Mui-focused": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                      },
+                    }}
+                  />
+                }
+                name="jobTypes"
+                renderValue={(selected) => (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {selected.map((value) => (
+                      <Chip
+                        key={value}
+                        label={value}
+                        size="small"
+                        sx={{
+                          background: "rgba(25, 118, 210, 0.08)",
+                          borderRadius: "6px",
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+                MenuProps={MenuProps}
+              >
+                {mockJobTypes.map((type) => (
+                  <MenuItem
+                    key={type}
+                    value={type}
+                    sx={{
+                      py: 1.2, // Increased padding
+                      "&:hover": { backgroundColor: "rgba(25, 118, 210, 0.08)" },
+                    }}
+                  >
+                    <Checkbox
+                      checked={filters.jobTypes.indexOf(type) > -1}
+                      size="medium" // Changed from small
+                      color="primary"
+                    />
+                    <ListItemText
+                      primary={type}
+                      primaryTypographyProps={{
+                        fontSize: "0.95rem",
+                        fontWeight: 500,
+                      }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-          {totalActiveFilters > 5 && (
-            <Chip
-              label={`+${totalActiveFilters - 5} bộ lọc khác`}
-              size="small"
-              onClick={() => setMobileFilterOpen(true)}
-            />
-          )}
-        </Box>
-      )}
+          {/* Experience Select */}
+          <Grid item xs={12} sm={6} md={4} lg={2.4}>
+            <FormControl fullWidth size="small">
+              <InputLabel
+                id="experience-filter-label"
+                sx={{
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                  padding: "0 8px 0 0", // Thêm padding bên phải
+                  backgroundColor: "white", // Đảm bảo nền trắng để text hiển thị rõ
+                  borderRadius: "4px",
+                }}
+              >
+                Kinh nghiệm
+              </InputLabel>
+              <Select
+                labelId="experience-filter-label"
+                multiple
+                value={filters.experienceLevels}
+                onChange={handleMultiSelectChange}
+                input={
+                  <OutlinedInput
+                    label="Kinh nghiệm"
+                    sx={{
+                      width: "8.7em",
+                      borderRadius: "10px",
+                      "&:hover": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                      },
+                      "&.Mui-focused": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                      },
+                    }}
+                  />
+                }
+                name="experienceLevels"
+                renderValue={(selected) => (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {selected.map((value) => (
+                      <Chip
+                        key={value}
+                        label={value}
+                        size="small"
+                        sx={{
+                          background: "rgba(25, 118, 210, 0.08)",
+                          borderRadius: "6px",
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+                MenuProps={MenuProps}
+              >
+                {mockExperiences.map((level) => (
+                  <MenuItem
+                    key={level}
+                    value={level}
+                    sx={{
+                      py: 1.2, // Increased padding
+                      "&:hover": { backgroundColor: "rgba(25, 118, 210, 0.08)" },
+                    }}
+                  >
+                    <Checkbox
+                      checked={filters.experienceLevels.indexOf(level) > -1}
+                      size="medium" // Changed from small
+                      color="primary"
+                    />
+                    <ListItemText
+                      primary={level}
+                      primaryTypographyProps={{
+                        fontSize: "0.95rem",
+                        fontWeight: 500,
+                      }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-      <Grid container spacing={3} alignItems="flex-start">
-        {/* === Filters Sidebar (Desktop) === */}
-        <Grid item xs={12} md={3} sx={{ display: { xs: "none", md: "block" } }}>
-          <Paper
-            sx={{
-              p: 2,
-              position: "sticky",
-              top: 80, // Adjust based on your header height
-              borderRadius: "12px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-            }}
-          >
-            <FilterContent />
-          </Paper>
+          {/* Salary Select */}
+          <Grid item xs={12} sm={6} md={4} lg={2.4}>
+            <FormControl fullWidth size="small">
+              <InputLabel
+                id="salary-filter-label"
+                sx={{
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                  padding: "0 8px 0 0", // Thêm padding bên phải
+                  backgroundColor: "white", // Đảm bảo nền trắng để text hiển thị rõ
+                  borderRadius: "4px",
+                }}
+              >
+                Mức lương
+              </InputLabel>
+              <Select
+                labelId="salary-filter-label"
+                multiple
+                value={filters.salaryRanges}
+                onChange={handleMultiSelectChange}
+                input={
+                  <OutlinedInput
+                    label="Mức lương"
+                    sx={{
+                      width: "8.4em",
+                      borderRadius: "10px",
+                      "&:hover": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                      },
+                      "&.Mui-focused": {
+                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                      },
+                    }}
+                  />
+                }
+                name="salaryRanges"
+                renderValue={(selected) => (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {selected.map((value) => {
+                      const selectedLabel = mockSalaryRanges.find((r) => r.value === value)?.label || value
+                      return (
+                        <Chip
+                          key={value}
+                          label={selectedLabel}
+                          size="small"
+                          sx={{
+                            background: "rgba(25, 118, 210, 0.08)",
+                            borderRadius: "6px",
+                          }}
+                        />
+                      )
+                    })}
+                  </Box>
+                )}
+                MenuProps={MenuProps}
+              >
+                {mockSalaryRanges.map((range) => (
+                  <MenuItem
+                    key={range.value}
+                    value={range.value}
+                    sx={{
+                      py: 1.2, // Increased padding
+                      "&:hover": { backgroundColor: "rgba(25, 118, 210, 0.08)" },
+                    }}
+                  >
+                    <Checkbox
+                      checked={filters.salaryRanges.indexOf(range.value) > -1}
+                      size="medium" // Changed from small
+                      color="primary"
+                    />
+                    <ListItemText
+                      primary={range.label}
+                      primaryTypographyProps={{
+                        fontSize: "0.95rem",
+                        fontWeight: 500,
+                      }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Nút Clear Filters */}
+          <Grid item xs={12} sm={6} md={4} lg={0.8} sx={{ textAlign: { xs: "right", lg: "center" } }}>
+            <Button
+              onClick={handleClearFilters}
+              variant="outlined"
+              size="medium"
+              sx={{
+                height: "40px",
+                borderRadius: "10px",
+                borderColor: "rgba(25, 118, 210, 0.5)",
+                "&:hover": {
+                  borderColor: "primary.main",
+                  backgroundColor: "rgba(25, 118, 210, 0.04)",
+                },
+              }}
+              startIcon={<ClearAllIcon fontSize="small" />}
+            >
+              Xóa lọc
+            </Button>
+          </Grid>
         </Grid>
-
-        {/* === Job Listings Area (Cột Phải) === */}
-        <Grid item xs={12} md={9} sx={{width: "30em"}}>
-          {/* Header kết quả */}
+      </Paper>
+      {/* === KẾT THÚC THANH FILTER NGANG === */}
+      {/* === KHU VỰC HIỂN THỊ KẾT QUẢ === */}
+      <Grid container spacing={3}>
+        {" "}
+        {/* Grid container bao ngoài kết quả */}
+        <Grid item xs={12}>
+          {" "}
+          {/* Grid item chiếm toàn bộ chiều rộng */}
+          {/* Header kết quả ("Tìm thấy X việc làm" + Sắp xếp) */}
           <Paper
             sx={{
-              p: 2,
+              width: "140%",
+              p: 2.5,
               mb: 3,
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
               borderRadius: "12px",
               boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              backgroundColor: "#f8fafc",
             }}
           >
-            <Typography variant="h6" fontWeight="medium" color="text.primary"sx={{ width:'100%' }}>
-              Tìm thấy {loading ? "..." : displayJobs.length} việc làm
-            </Typography>
-
-            <FormControl
-              size="small"
-              variant="outlined"
+            <Typography
+              variant="h6"
+              fontWeight="600"
+              color="text.primary"
               sx={{
-                minWidth: 150,
-                display: { xs: "none", md: "block" }, // Hide on mobile header
+                display: "flex",
+                alignItems: "center",
+                "&::before": {
+                  content: '""',
+                  display: "inline-block",
+                  width: "4px",
+                  height: "24px",
+                  backgroundColor: "primary.main",
+                  borderRadius: "2px",
+                  marginRight: "12px",
+                },
               }}
             >
-              <InputLabel>Sắp xếp</InputLabel>
+              Tìm thấy {loading ? "..." : displayJobs.length} việc làm
+            </Typography>
+            <FormControl size="small" variant="outlined" sx={{ minWidth: 160 }}>
+              <InputLabel
+                sx={{
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: "text.primary",
+                  padding: "0 8px 0 0", // Thêm padding bên phải
+                  backgroundColor: "white", // Đảm bảo nền trắng để text hiển thị rõ
+                  borderRadius: "4px",
+                }}
+              >
+                Sắp xếp
+              </InputLabel>
               <Select
                 value={sortBy}
                 label="Sắp xếp"
                 onChange={handleSortChange}
-                startAdornment={<SortIcon sx={{ mr: 0.5, ml: -0.5, color: "action.active" }} />}
-                sx={{ borderRadius: "8px" }}
+                startAdornment={<SortIcon sx={{ mr: 0.5, ml: -0.5, color: "primary.light" }} />}
+                sx={{
+                  borderRadius: "10px",
+                  "&:hover": {
+                    boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.1)",
+                  },
+                  "&.Mui-focused": {
+                    boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
+                  },
+                }}
               >
                 <MenuItem value="newest">Mới nhất</MenuItem>
               </Select>
             </FormControl>
           </Paper>
-
           {/* Hiển thị Loading, Lỗi hoặc Kết quả */}
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
               <LoadingSpinner />
             </Box>
           ) : error ? (
@@ -618,60 +721,80 @@ function JobListingsPage() {
               severity="error"
               sx={{
                 mt: 2,
-                borderRadius: "8px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                borderRadius: "10px",
+                padding: "16px 20px",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
               }}
             >
               {error}
             </Alert>
           ) : (
             <Box>
-              <Grid container spacing={2}>
+              {/* Grid chứa Job Cards */}
+              <Grid container spacing={3}>
                 {currentJobs.length > 0 ? (
                   currentJobs.map((job) => (
-                    <Grid
-                      item
-                      xs={12}
-                      sm={6}
-                      lg={4} // 3 columns on large screens
-                      key={job._id || job.id}
-                      sx={{
-                        display: "flex",
-                      }}
-                    >
-                      <Box sx={{ width: "100%" }}>
+                    <Grid item xs={12} sm={6} md={4} key={job._id || job.id}>
+                      {" "}
+                      {/* Giữ 3 cột trên md */}
+                      <Box
+                        sx={{
+                          width: "100%",
+                          height: "100%",
+                          transition: "transform 0.2s ease-in-out",
+                          "&:hover": {
+                            transform: "translateY(-4px)",
+                          },
+                        }}
+                      >
                         <JobCard job={job} />
                       </Box>
                     </Grid>
                   ))
                 ) : (
-                  // Improved "No results" display
-                  <Grid item xs={12} sx={{ textAlign: "center", py: 6 }}>
+                  // "No results" display
+                  <Grid item xs={12} sx={{ textAlign: "center", py: 8 }}>
                     <Box
                       sx={{
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        p: { xs: 2, sm: 4 },
-                        borderRadius: "12px",
-                        bgcolor: "background.paper", // Use paper background
-                        maxWidth: "500px",
+                        p: { xs: 3, sm: 5 },
+                        borderRadius: "16px",
+                        bgcolor: "#f8fafc",
+                        maxWidth: "550px",
                         mx: "auto",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
+                        border: "1px solid rgba(0,0,0,0.05)",
                       }}
                     >
-                      <FindInPageOutlinedIcon sx={{ fontSize: 70, color: "text.secondary", mb: 2, opacity: 0.7 }} />
-                      <Typography variant="h6" gutterBottom fontWeight="medium">
+                      <FindInPageOutlinedIcon
+                        sx={{
+                          fontSize: 80,
+                          color: "primary.light",
+                          mb: 3,
+                          opacity: 0.7,
+                        }}
+                      />
+                      <Typography variant="h5" gutterBottom fontWeight="600" color="primary.dark">
                         Không tìm thấy việc làm phù hợp
                       </Typography>
-                      <Typography color="text.secondary" sx={{ mb: 2 }}>
+                      <Typography color="text.secondary" sx={{ mb: 3 }}>
                         Vui lòng thử thay đổi hoặc xóa bớt bộ lọc.
                       </Typography>
                       <Button
-                        variant="outlined"
+                        variant="contained"
                         onClick={handleClearFilters}
                         startIcon={<ClearAllIcon />}
-                        sx={{ borderRadius: "8px" }}
+                        sx={{
+                          borderRadius: "10px",
+                          py: 1.2,
+                          px: 3,
+                          boxShadow: "0 4px 14px rgba(25, 118, 210, 0.25)",
+                          "&:hover": {
+                            boxShadow: "0 6px 16px rgba(25, 118, 210, 0.3)",
+                          },
+                        }}
                       >
                         Xóa tất cả bộ lọc
                       </Button>
@@ -682,7 +805,7 @@ function JobListingsPage() {
 
               {/* Phân trang */}
               {pageCount > 1 && (
-                <Box sx={{ display: "flex", justifyContent: "center", mt: 4, mb: 2 }}>
+                <Box sx={{ display: "flex", justifyContent: "center", mt: 5, mb: 3 }}>
                   <Pagination
                     count={pageCount}
                     page={currentPage}
@@ -690,11 +813,17 @@ function JobListingsPage() {
                     color="primary"
                     showFirstButton
                     showLastButton
-                    size="large" // Larger pagination
+                    size="large"
                     sx={{
                       "& .MuiPaginationItem-root": {
                         borderRadius: "8px",
-                        mx: 0.5, // Add some horizontal margin
+                        mx: 0.5,
+                        minWidth: "40px",
+                        height: "40px",
+                        fontWeight: 500,
+                      },
+                      "& .Mui-selected": {
+                        boxShadow: "0 2px 8px rgba(25, 118, 210, 0.25)",
                       },
                     }}
                   />
@@ -702,8 +831,10 @@ function JobListingsPage() {
               )}
             </Box>
           )}
-        </Grid>
-      </Grid>
+        </Grid>{" "}
+        {/* Kết thúc Grid item chứa kết quả */}
+      </Grid>{" "}
+      {/* Kết thúc Grid container bao ngoài kết quả */}
     </Container>
   )
 }

@@ -1,80 +1,131 @@
 // backend/controllers/jobController.js
 const Job = require('../models/Job');
-// (Có thể cần import các model khác như Company, User sau)
+const mongoose = require('mongoose');
 
 // --- 1. Tạo Job mới (POST /api/jobs) ---
-// Yêu cầu: Đã đăng nhập, vai trò 'employer'
 exports.createJob = async (req, res) => {
+    console.log('--- Received Request to Create Job ---');
     try {
-        // Lấy dữ liệu từ body request
+        // Lấy dữ liệu job chính từ body request
         const {
-            title, companyName, location, type, salary, description,
+            title, companyName: reqCompanyName, // Lấy từ body làm dự phòng
+            location, type, salary, description,
             requirements, benefits, industry, requiredSkills,
             experienceLevel, numberOfHires, applicationDeadline,
-            associatedTestIds // Giả sử frontend gửi mảng ID của test
-            // companyId sẽ lấy từ đâu? Tạm thời có thể yêu cầu gửi kèm hoặc lấy từ user employer
+            associatedTestIds
         } = req.body;
 
-        // Lấy ID của employer từ middleware protect (req.user được gắn ở middleware)
-        const postedByUserId = req.user.userId; // userId được lấy từ token payload
+        console.log('Request Body:', JSON.stringify(req.body, null, 2));
+
+        // <<< BƯỚC 1: LẤY THÔNG TIN TỪ req.user (từ token) LÊN TRƯỚC >>>
+        if (!req.user || !req.user.userId) {
+             console.error('Error: req.user or req.user.userId is missing. Check protect middleware.');
+             return res.status(401).json({ message: 'Xác thực thất bại hoặc thiếu thông tin người dùng.' });
+        }
+        const postedByUserId = req.user.userId;
+        const employerCompanyName = req.user.companyName; // Lấy CompanyName từ token
+        const employerCompanyId = req.user.companyId;    // Lấy CompanyId từ token
+
+        console.log('User Info from Token:', JSON.stringify(req.user, null, 2));
 
         // --- VALIDATE DỮ LIỆU ĐẦU VÀO ---
-        if (!title || !companyName || !location || !type || !description || !requirements || !postedByUserId) {
-            return res.status(400).json({ message: 'Thiếu thông tin bắt buộc để tạo công việc.' });
+        // In ra các giá trị cụ thể đang được kiểm tra
+        console.log('--- Checking fields for validation ---');
+        console.log('Title:', title);
+        console.log('CompanyName (from token):', employerCompanyName); // <<< Sửa: Dùng employerCompanyName
+        console.log('Location:', location);
+        console.log('Type:', type);
+        console.log('Description:', description);
+        console.log('Requirements:', requirements);
+        console.log('PostedByUserId:', postedByUserId);
+        console.log('------------------------------------');
+
+        // Sử dụng employerCompanyName (lấy từ token) để kiểm tra
+        if (!title || !employerCompanyName || !location || !type || !description || !requirements || !postedByUserId) {
+             console.log('>>> Validation Failed! Sending 400 Error.');
+             // Trả về lỗi rõ ràng hơn
+             let missingFields = [];
+             if (!title) missingFields.push('Chức danh');
+             if (!employerCompanyName) missingFields.push('Tên công ty (từ tài khoản)'); // Chỉ rõ nguồn
+             if (!location) missingFields.push('Địa điểm');
+             if (!type) missingFields.push('Loại hình');
+             if (!description) missingFields.push('Mô tả');
+             if (!requirements) missingFields.push('Yêu cầu');
+             if (!postedByUserId) missingFields.push('Thông tin người đăng');
+             return res.status(400).json({ message: `Thiếu thông tin bắt buộc: ${missingFields.join(', ')}.` });
         }
+        // TODO: Thêm kiểm tra companyId nếu cần
 
-        // (Thêm Validate companyId nếu bạn yêu cầu nó trong body hoặc lấy từ req.user)
-        // Ví dụ: Lấy companyId từ thông tin user (nếu đã lưu trong User model/token)
-        // const companyId = req.user.companyId; // Giả sử có companyId trong token payload
-        // if (!companyId) {
-        //     return res.status(400).json({ message: 'Không tìm thấy thông tin công ty của nhà tuyển dụng.' });
-        // }
-
-
-        // Tạo job mới
-        const newJob = new Job({
+        // --- Tạo đối tượng Job mới ---
+        const newJobData = {
             title,
-            companyName,
-            // companyId, // Thêm vào nếu đã lấy được ở trên
-            postedBy: postedByUserId, // Gán ID của employer đăng bài
+            companyName: employerCompanyName, // <<< Dùng biến chuẩn hóa từ token
+            companyId: employerCompanyId,     // <<< Dùng biến chuẩn hóa từ token
+            postedBy: postedByUserId,
             location,
             type,
             salary,
             description,
             requirements,
             benefits,
-            industry,
+            industry, // Lấy từ req.body
             requiredSkills,
             experienceLevel,
-            numberOfHires,
-            applicationDeadline: applicationDeadline || null, // null nếu không cung cấp
-            associatedTests: associatedTestIds || [], // Mảng ID các bài test
-            status: 'Active' // Mặc định là Active khi tạo
-        });
+            numberOfHires: parseInt(numberOfHires, 10) || 1,
+            applicationDeadline: applicationDeadline || null,
+            associatedTests: Array.isArray(associatedTestIds) ? associatedTestIds : [],
+            status: 'Active'
+        };
 
-        // Lưu vào CSDL
+        console.log('--- Creating new Job with data ---');
+        console.log(JSON.stringify(newJobData, null, 2));
+        console.log('---------------------------------');
+
+        const newJob = new Job(newJobData);
+
+        // --- Lưu vào CSDL ---
         const savedJob = await newJob.save();
+        console.log('--- Job Saved Successfully! ---');
 
         res.status(201).json({ message: 'Tạo tin tuyển dụng thành công!', job: savedJob });
 
     } catch (error) {
         console.error("Create Job Error:", error);
-         if (error.name === 'ValidationError') {
+        if (error.name === 'ValidationError') {
              const messages = Object.values(error.errors).map(val => val.message);
-             return res.status(400).json({ message: messages.join('. ') });
+             console.error("Validation Errors:", messages);
+             return res.status(400).json({ message: `Lỗi validation: ${messages.join('. ')}` });
         }
+        console.error("Unhandled Server Error:", error.message, error.stack);
         res.status(500).json({ message: 'Lỗi máy chủ khi tạo tin tuyển dụng.' });
     }
 };
 
-// --- 2. Lấy tất cả Jobs (GET /api/jobs) ---
-// Có thể thêm lọc, phân trang, sắp xếp ở đây
-exports.getAllJobs = async (req, res) => {
+// --- Lấy danh sách Jobs của Employer đang đăng nhập ---
+exports.getEmployerJobs = async (req, res) => {
+    // ... (code hàm này giữ nguyên như trước) ...
+     console.log('--- Reached getEmployerJobs Controller ---');
     try {
-        // Chỉ lấy các job đang Active để hiển thị công khai (ví dụ)
-        const jobs = await Job.find({ status: 'Active' })
-                              .sort({ createdAt: -1 }); // Sắp xếp mới nhất lên đầu
+        const employerId = req.user.userId;
+        console.log('Fetching jobs for Employer ID:', employerId);
 
+        if (!employerId) {
+            return res.status(401).json({ message: 'Không thể xác định nhà tuyển dụng.' });
+        }
+        const jobs = await Job.find({ postedBy: employerId }).sort({ createdAt: -1 });
+        console.log(`Found ${jobs.length} jobs for employer.`);
+        res.status(200).json(jobs);
+    } catch (error) {
+        console.error("Error in getEmployerJobs:", error);
+        res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách công việc của bạn.' });
+    }
+};
+
+// --- Lấy tất cả Jobs công khai ---
+exports.getAllJobs = async (req, res) => {
+    // ... (code hàm này giữ nguyên như trước) ...
+     try {
+        const jobs = await Job.find({ status: 'Active' }).sort({ createdAt: -1 });
         res.status(200).json(jobs);
     } catch (error) {
         console.error("Get All Jobs Error:", error);
@@ -82,61 +133,49 @@ exports.getAllJobs = async (req, res) => {
     }
 };
 
-// --- 3. Lấy chi tiết một Job (GET /api/jobs/:id) ---
+// --- Lấy chi tiết một Job ---
 exports.getJobById = async (req, res) => {
     try {
-        const jobId = req.params.id; // Lấy ID từ URL parameter
-
-        // Kiểm tra ID có hợp lệ không (Mongoose ObjectId)
-        if (!mongoose.Types.ObjectId.isValid(jobId)) {
+        const jobId = req.params.id;
+        if (!mongoose.Types.ObjectId.isValid(jobId)) { // ID format is valid in user's example
             return res.status(400).json({ message: 'ID công việc không hợp lệ.' });
         }
-
-        const job = await Job.findById(jobId);
-                            // .populate('postedBy', 'fullName email companyName') // Lấy thêm thông tin người đăng (tùy chọn)
-                            // .populate('companyId', 'name logoUrl'); // Lấy thêm thông tin công ty (tùy chọn)
+        console.log(`Finding job with ID: ${jobId}`); // Add log
+        const job = await Job.findById(jobId); // <<< The database lookup happens here
+        console.log('Job found:', job); // Add log
 
         if (!job) {
-            return res.status(404).json({ message: 'Không tìm thấy công việc.' }); // 404: Not Found
+            // <<< THIS IS LIKELY WHERE THE 404 RESPONSE IS SENT >>>
+            console.log(`Job with ID ${jobId} not found in DB.`); // Add log
+            return res.status(404).json({ message: 'Không tìm thấy công việc.' });
         }
-
-        res.status(200).json(job);
+        res.status(200).json(job); // Send job if found
     } catch (error) {
-        console.error("Get Job By ID Error:", error);
+        console.error("Get Job By ID Error:", error); // Check for DB errors here
         res.status(500).json({ message: 'Lỗi máy chủ khi lấy chi tiết công việc.' });
     }
 };
 
-
-// --- 4. Cập nhật Job (PUT /api/jobs/:id) ---
-// Yêu cầu: Đã đăng nhập, vai trò 'employer', là người đăng job đó
+// --- Cập nhật Job ---
 exports.updateJob = async (req, res) => {
-    try {
+    // ... (code hàm này giữ nguyên như trước, đã có kiểm tra mongoose.Types.ObjectId và quyền sở hữu) ...
+      try {
         const jobId = req.params.id;
-        const updates = req.body; // Dữ liệu cần cập nhật từ body
-        const userId = req.user.userId; // ID của user đang thực hiện request
+        const updates = req.body;
+        const userId = req.user.userId;
 
         if (!mongoose.Types.ObjectId.isValid(jobId)) {
             return res.status(400).json({ message: 'ID công việc không hợp lệ.' });
         }
-
         const job = await Job.findById(jobId);
-
         if (!job) {
             return res.status(404).json({ message: 'Không tìm thấy công việc.' });
         }
-
-        // --- KIỂM TRA QUYỀN SỞ HỮU ---
         if (job.postedBy.toString() !== userId) {
-             return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa tin tuyển dụng này.' }); // 403: Forbidden
+             return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa tin tuyển dụng này.' });
         }
-
-        // Cập nhật job, { new: true } để trả về bản ghi đã được cập nhật
-        // runValidators: true để chạy lại các validation trong Schema khi cập nhật
         const updatedJob = await Job.findByIdAndUpdate(jobId, updates, { new: true, runValidators: true });
-
         res.status(200).json({ message: 'Cập nhật tin tuyển dụng thành công!', job: updatedJob });
-
     } catch (error) {
         console.error("Update Job Error:", error);
          if (error.name === 'ValidationError') {
@@ -147,35 +186,25 @@ exports.updateJob = async (req, res) => {
     }
 };
 
-// --- 5. Xóa Job (DELETE /api/jobs/:id) ---
-// Yêu cầu: Đã đăng nhập, vai trò 'employer', là người đăng job đó
+// --- Xóa Job ---
 exports.deleteJob = async (req, res) => {
-     try {
+    // ... (code hàm này giữ nguyên như trước, đã có kiểm tra mongoose.Types.ObjectId và quyền sở hữu) ...
+      try {
         const jobId = req.params.id;
         const userId = req.user.userId;
 
         if (!mongoose.Types.ObjectId.isValid(jobId)) {
             return res.status(400).json({ message: 'ID công việc không hợp lệ.' });
         }
-
         const job = await Job.findById(jobId);
-
         if (!job) {
             return res.status(404).json({ message: 'Không tìm thấy công việc.' });
         }
-
-        // --- KIỂM TRA QUYỀN SỞ HỮU ---
         if (job.postedBy.toString() !== userId) {
              return res.status(403).json({ message: 'Bạn không có quyền xóa tin tuyển dụng này.' });
         }
-
-        // Xóa job
         await Job.findByIdAndDelete(jobId);
-
-        // TODO: Có thể cần xóa các Applications liên quan đến job này (nếu cần)
-
         res.status(200).json({ message: 'Xóa tin tuyển dụng thành công!' });
-
     } catch (error) {
         console.error("Delete Job Error:", error);
         res.status(500).json({ message: 'Lỗi máy chủ khi xóa tin tuyển dụng.' });

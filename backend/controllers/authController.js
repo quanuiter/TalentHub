@@ -2,13 +2,14 @@
 const User = require('../models/User'); // Import User model
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const Company = require('../models/Company');
 
 // --- Hàm xử lý Đăng ký ---
 exports.registerUser = async (req, res) => {
     try {
         // 1. Lấy dữ liệu từ request body (frontend gửi lên)
-        const { fullName, email, password, role, companyName, companyId } = req.body;
-
+        const { fullName, email, password, role, companyName} = req.body;
+        
         // 2. Validate dữ liệu cơ bản (có thể validate kỹ hơn)
         if (!fullName || !email || !password || !role) {
             return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin bắt buộc (Họ tên, Email, Mật khẩu, Vai trò).' });
@@ -17,13 +18,40 @@ exports.registerUser = async (req, res) => {
         if (password.length < 6) {
              return res.status(400).json({ message: 'Mật khẩu phải có ít nhất 6 ký tự.' });
         }
-
+        if (role === 'employer' && !companyName) { // <<< Bắt buộc companyName nếu là employer
+            return res.status(400).json({ message: 'Vui lòng nhập tên công ty cho nhà tuyển dụng.' });
+       }
         // 3. Kiểm tra xem email đã tồn tại chưa
         const existingUser = await User.findOne({ email: email.toLowerCase() });
         if (existingUser) {
             return res.status(400).json({ message: 'Email này đã được sử dụng.' });
         }
+        let companyId = null; // Khai báo bằng let
+        let finalCompanyName = companyName; // Khai báo bằng let
 
+        if (role === 'employer') {
+            // Tìm công ty theo tên (có thể cần xử lý case-insensitive hoặc tìm kiếm linh hoạt hơn)
+            let company = await Company.findOne({ name: { $regex: new RegExp(`^${companyName}$`, 'i') } }); // Tìm không phân biệt hoa thường
+
+            if (!company) {
+                // Nếu công ty chưa tồn tại -> Tạo mới
+                console.log(`Company "${companyName}" not found, creating new one.`);
+                const newCompany = new Company({
+                    name: companyName, // Sử dụng tên từ request
+                    //createdBy: savedUser._id // Sẽ gán sau khi có savedUser._id, hoặc bỏ qua nếu không cần
+                    // Thêm các trường mặc định khác nếu muốn
+                });
+                const savedCompany = await newCompany.save();
+                companyId = savedCompany._id; // Lấy ID công ty mới tạo
+                finalCompanyName = savedCompany.name; // Lấy tên chuẩn từ CSDL (nếu có xử lý tên)
+                console.log(`New company created with ID: ${companyId}`);
+            } else {
+                // Nếu công ty đã tồn tại -> Lấy ID
+                companyId = company._id;
+                finalCompanyName = company.name; // Lấy tên chuẩn từ CSDL
+                console.log(`Existing company found with ID: ${companyId}`);
+            }
+        }
         // 4. Tạo user mới (Mật khẩu sẽ tự động được hash bởi pre-save hook trong User model)
         const newUser = new User({
             fullName,
@@ -36,24 +64,38 @@ exports.registerUser = async (req, res) => {
 
         // 5. Lưu user vào CSDL
         const savedUser = await newUser.save();
-
+        const tokenPayload = {
+            userId: savedUser._id,
+            role: savedUser.role
+       };
+        // Thêm companyId và companyName vào payload nếu là employer
+       if (savedUser.role === 'employer') {
+            if (savedUser.companyId) { // companyId đã được gán khi tạo/tìm company
+               tokenPayload.companyId = savedUser.companyId;
+            }
+            if (savedUser.companyName) { // companyName cũng đã được gán
+               tokenPayload.companyName = savedUser.companyName; // <<< THÊM GÁN companyName
+            }
+       }
         // 6. Tạo JWT token cho user vừa đăng ký (tùy chọn, có thể yêu cầu login sau)
         const token = jwt.sign(
-            { userId: savedUser._id, role: savedUser.role }, // Payload chứa ID và role
-            process.env.JWT_SECRET, // Khóa bí mật từ .env
-            { expiresIn: '1d' } // Token hết hạn sau 1 ngày (ví dụ)
+            tokenPayload,
+            //{ userId: savedUser._id, role: savedUser.role, companyId: savedUser.companyId }, // <<< Thêm companyId vào token payload nếu cần
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
         );
 
         // 7. Trả về thông tin user (loại bỏ password) và token
-        res.status(201).json({ // status 201: Created
+        res.status(201).json({
             message: 'Đăng ký thành công!',
-            token, // Trả token để frontend lưu lại và tự động đăng nhập
+            token,
             user: {
                 id: savedUser._id,
                 fullName: savedUser.fullName,
                 email: savedUser.email,
                 role: savedUser.role,
-                // Thêm các trường khác nếu cần
+                companyName: savedUser.companyName, // Trả về companyName
+                companyId: savedUser.companyId // Trả về companyId
             }
         });
 
@@ -90,10 +132,20 @@ exports.loginUser = async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng.' });
         }
-
+        const tokenPayload = { userId: user._id, role: user.role };
+        // Thêm companyId vào payload nếu là employer và có companyId
+        if (user.role === 'employer') {
+            if (user.companyId) {
+               tokenPayload.companyId = user.companyId;
+            }
+            if (user.companyName) { // <<< THÊM KIỂM TRA VÀ GÁN companyName
+               tokenPayload.companyName = user.companyName;
+            }
+       }
         // 5. Nếu thông tin hợp lệ, tạo JWT token
         const token = jwt.sign(
-            { userId: user._id, role: user.role }, // Payload
+            tokenPayload,
+            //{ userId: user._id, role: user.role }, // Payload
             process.env.JWT_SECRET,                // Secret key
             { expiresIn: '1d' }                    // Thời hạn token
         );

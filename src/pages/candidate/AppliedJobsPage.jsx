@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext'; // Để lấy candidateId (nếu cần)
-import { fetchAppliedJobs } from '../../data/mockJobs'; // Import hàm fetch giả lập
+import apiService from '../../services/api';
 
 // Import MUI components
 import Box from '@mui/material/Box';
@@ -44,29 +44,35 @@ function AppliedJobsPage() {
 
   useEffect(() => {
     const loadAppliedJobs = async () => {
-      if (!authState.user?.id) return; // Cần user id để fetch đúng
-
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchAppliedJobs(authState.user.id); // Truyền ID ứng viên
-        setAppliedJobs(data);
+        // <<< GỌI API THẬT >>>
+        const response = await apiService.getCandidateApplicationsApi();
+
+        if (response && Array.isArray(response.data)) {
+           setAppliedJobs(response.data);
+        } else {
+            console.error("Applied jobs API response is not an array:", response);
+            setAppliedJobs([]);
+            setError("Dữ liệu việc làm đã ứng tuyển trả về không hợp lệ.");
+        }
       } catch (err) {
         console.error("Lỗi khi tải danh sách việc làm đã ứng tuyển:", err);
-        setError("Không thể tải danh sách việc làm đã ứng tuyển.");
+        const errorMsg = err.response?.data?.message || err.message || "Không thể tải danh sách việc làm đã ứng tuyển.";
+        setError(errorMsg);
+        setAppliedJobs([]);
       } finally {
         setLoading(false);
       }
     };
 
     loadAppliedJobs();
-  }, [authState.user?.id]); // Fetch lại nếu user id thay đổi (thường không cần thiết sau login)
+  }, []);
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-        Việc làm đã ứng tuyển
-      </Typography>
+      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}> Việc làm đã ứng tuyển </Typography>
 
       {loading && <LoadingSpinner />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -74,53 +80,61 @@ function AppliedJobsPage() {
       {!loading && !error && (
         <TableContainer component={Paper}>
           <Table sx={{ minWidth: 650 }} aria-label="Applied jobs table">
-            <TableHead sx={{ backgroundColor: '#f5f5f5' }}> {/* Thêm màu nền cho header */}
+            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
               <TableRow>
                 <TableCell>Chức danh</TableCell>
                 <TableCell>Công ty</TableCell>
                 <TableCell align="center">Ngày ứng tuyển</TableCell>
                 <TableCell align="center">Trạng thái</TableCell>
-                {/* <TableCell align="right">Hành động</TableCell> */}
               </TableRow>
             </TableHead>
             <TableBody>
-              {appliedJobs.length > 0 ? (
-                appliedJobs.map((app) => (
-                  <TableRow
-                    key={app.applicationId}
-                    sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                  >
-                    <TableCell component="th" scope="row">
-                      {/* Link đến trang chi tiết việc làm */}
-                      <Link component={RouterLink} to={`/jobs/${app.jobId}`} underline="hover">
-                        {app.jobTitle}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{app.companyName}</TableCell>
-                    <TableCell align="center">
-                      {new Date(app.dateApplied).toLocaleDateString('vi-VN')}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={app.status}
-                        color={getStatusChipColor(app.status)} // Dùng hàm helper để lấy màu
-                        size="small"
-                      />
-                    </TableCell>
-                    {/* <TableCell align="right"> */}
-                      {/* Có thể thêm nút xem chi tiết đơn ứng tuyển sau */}
-                      {/* <Button size="small" variant="outlined">Chi tiết</Button> */}
-                    {/* </TableCell> */}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} align="center"> {/* colSpan bằng số lượng cột */}
-                    Bạn chưa ứng tuyển vào vị trí nào.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
+                            {appliedJobs.length > 0 ? (
+                                appliedJobs.map((app) => {
+                                    // Lấy object Job đã được populate
+                                    const jobInfo = app.jobId;
+                                    // Lấy ID của Application để làm key
+                                    const appKey = app._id || app.applicationId; // Dùng _id nếu có
+
+                                    return (
+                                        <TableRow
+                                            key={appKey} // <<< Dùng ID của Application làm key
+                                            sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                                        >
+                                            {/* Cột Chức danh: Lấy title từ jobInfo */}
+                                            <TableCell component="th" scope="row">
+                                                {jobInfo ? (
+                                                    // Link đến trang chi tiết job bằng ID của job
+                                                    <Link component={RouterLink} to={`/jobs/${jobInfo._id || jobInfo.id}`} underline="hover">
+                                                        {jobInfo.title || 'N/A'}
+                                                    </Link>
+                                                ) : ('Thông tin việc làm không có')}
+                                            </TableCell>
+                                            {/* Cột Công ty: Lấy companyName từ jobInfo */}
+                                            <TableCell>{jobInfo?.companyName || 'N/A'}</TableCell>
+                                            {/* Cột Ngày ứng tuyển: Lấy createdAt từ Application */}
+                                            <TableCell align="center">
+                                                {app.createdAt ? new Date(app.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
+                                            </TableCell>
+                                            {/* Cột Trạng thái: Giữ nguyên, lấy status từ Application */}
+                                            <TableCell align="center">
+                                                <Chip
+                                                    label={app.status}
+                                                    color={getStatusChipColor(app.status)}
+                                                    size="small"
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} align="center">
+                                        Bạn chưa ứng tuyển vào vị trí nào.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
           </Table>
         </TableContainer>
       )}

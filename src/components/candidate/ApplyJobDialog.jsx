@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useAuth } from '../../contexts/AuthContext'; // Để lấy thông tin CV của user
-
+import apiService from '../../services/api';
 // MUI Components
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -70,32 +70,29 @@ function ApplyJobDialog({ open, onClose, jobTitle, jobId }) {
     setError('');
     setSuccess('');
     if (!selectedCvId) {
-      setError('Vui lòng chọn một CV để ứng tuyển.');
-      return;
+        setError('Vui lòng chọn một CV để ứng tuyển.');
+        return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await submitApplicationMock(
-        currentUser?.id,
-        jobId,
-        selectedCvId,
-        coverLetter
-      );
-      if (result.success) {
-        setSuccess(result.message);
-        // Tùy chọn: Đóng dialog sau một khoảng thời gian ngắn
-        setTimeout(() => {
-            onClose(); // Gọi hàm onClose được truyền từ props
-        }, 1500);
-         // TODO: Cập nhật trạng thái UI (ví dụ: disable nút Apply trên trang chi tiết, thêm vào AppliedJobs)
-      } else {
-        setError(result.message || 'Đã có lỗi xảy ra.');
-      }
+         // <<< GỌI API THẬT >>>
+        const applicationData = {
+            jobId: jobId,
+            cvId: selectedCvId,
+            coverLetter: coverLetter
+        };
+        const response = await apiService.createApplicationApi(applicationData);
+
+        setSuccess(response.data?.message || "Ứng tuyển thành công!");
+        setTimeout(() => { onClose(); }, 1500);
+        // TODO: Cập nhật UI (disable nút Apply, ...)
+
     } catch (err) {
-      setError(err.message || 'Không thể gửi đơn ứng tuyển.');
+         const errorMsg = err.response?.data?.message || err.message || 'Không thể gửi đơn ứng tuyển.';
+         setError(errorMsg);
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   };
 

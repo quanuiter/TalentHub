@@ -1,8 +1,9 @@
 // src/pages/employer/ApplicantsPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom'; // useParams sẽ dùng sau
+import apiService from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import EvaluateApplicantDialog from '../../components/employer/EvaluateApplicantDialog'; // <<< THÊM IMPORT NÀY
+import EvaluateApplicantDialog from '../../components/employer/EvaluateApplicantDialog';
 // Đảm bảo đường dẫn này đúng với nơi bạn lưu mock data và hàm fetch
 import {
   fetchApplicantsForJob,
@@ -112,37 +113,49 @@ function ApplicantsPage() {
   const [selectedApplicantForEvaluation, setSelectedApplicantForEvaluation] = useState(null);
   const [evaluationLoading, setEvaluationLoading] = useState(false); // Loading riêng cho việc lưu đánh giá
   // --- KẾT THÚC STATE MỚI ---
-    useEffect(() => {
-      const loadData = async () => {
-        if (!authState.user?.id || !jobId) { setLoading(false); setError("..."); return; };
-        setLoading(true); setError(null); setJobAssociatedTests([]);
-        try {
-          const [jobData, applicantData] = await Promise.all([
-              fetchEmployerJobDetail(authState.user.id, jobId),
-              fetchApplicantsForJob(authState.user.id, jobId)
+  useEffect(() => {
+    const loadData = async () => {
+      if (!jobId) {
+          setError("Không có ID công việc để tải ứng viên.");
+          setLoading(false);
+          return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+          // Gọi song song API lấy chi tiết job và danh sách ứng viên
+          const [jobDetailRes, applicantsRes] = await Promise.all([
+              apiService.getJobDetailsApi(jobId), // Lấy chi tiết job để hiển thị tên job
+              apiService.getApplicantsForJobApi(jobId) // Lấy danh sách ứng viên
           ]);
-  
-          if (jobData) {
-              setJobDetails(jobData);
-              // Fetch chi tiết các bài test được gắn vào job này
-              if (jobData.associatedTestIds && jobData.associatedTestIds.length > 0) {
-                  setLoadingAssociatedTests(true);
-                  try {
-                      const allTests = await fetchEmployerTests(authState.user.id); // Fetch all tests
-                      const associatedTestsDetails = allTests.filter(test =>
-                          jobData.associatedTestIds.includes(test.testId) // Lọc ra các test được gắn
-                      );
-                      setJobAssociatedTests(associatedTestsDetails);
-                  } catch (testErr) { console.error("Lỗi tải chi tiết bài test:", testErr); }
-                   finally { setLoadingAssociatedTests(false); }
-              }
-          } else { console.warn(`Không tìm thấy job ID: ${jobId}`); }
-          setApplicants(Array.isArray(applicantData) ? applicantData : []);
-        } catch (err) { /* ... */ setError("..."); }
-        finally { setLoading(false); }
-      };
-      loadData();
-    }, [authState.user?.id, jobId]);
+
+          if (jobDetailRes?.data) {
+               setJobDetails(jobDetailRes.data);
+          } else {
+               console.warn(`Không tìm thấy chi tiết job ID: ${jobId}`);
+               setJobDetails(null); // Hoặc set một object mặc định
+          }
+
+          if (applicantsRes && Array.isArray(applicantsRes.data)) {
+              setApplicants(applicantsRes.data);
+          } else {
+              console.error("Applicant API response is not an array:", applicantsRes);
+              setApplicants([]);
+              setError("Dữ liệu ứng viên trả về không hợp lệ.");
+          }
+
+      } catch (err) {
+         console.error("Lỗi khi tải dữ liệu trang ứng viên:", err);
+         const errorMsg = err.response?.data?.message || err.message || "Không thể tải dữ liệu trang ứng viên.";
+         setError(errorMsg);
+         setApplicants([]);
+         setJobDetails(null);
+      } finally {
+          setLoading(false);
+      }
+    };
+    loadData();
+  }, [jobId]);
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === 'clickaway') return;
@@ -151,21 +164,28 @@ function ApplicantsPage() {
 
   // Xử lý thay đổi trạng thái ứng viên
   const handleStatusChange = async (applicationId, newStatus) => {
-     setUpdatingStatusId(applicationId);
-     setSnackbar({ ...snackbar, open: false });
-     try {
-         const updatedApp = await updateApplicantStatus(applicationId, newStatus);
-         setApplicants(prevApps => prevApps.map(app =>
-             app.applicationId === applicationId ? updatedApp : app
-         ));
-         setSnackbar({open: true, message: 'Cập nhật trạng thái thành công!', severity: 'success'});
-     } catch(err) {
-          console.error("Lỗi khi cập nhật trạng thái:", err);
-          setSnackbar({open: true, message: 'Lỗi! Không thể cập nhật trạng thái.', severity: 'error'});
-     } finally {
-         setUpdatingStatusId(null);
-     }
-  };
+    if (!applicationId) return;
+    setUpdatingStatusId(applicationId);
+    setSnackbar({ ...snackbar, open: false });
+    try {
+        // <<< GỌI API UPDATE STATUS >>>
+        const response = await apiService.updateApplicationStatusApi(applicationId, { status: newStatus });
+        const updatedApp = response.data?.application;
+
+        // Cập nhật state applicants
+        setApplicants(prevApps => prevApps.map(app =>
+            (app._id || app.applicationId) === applicationId ? { ...app, status: updatedApp.status } : app // Cập nhật status từ response
+        ));
+        setSnackbar({open: true, message: response.data?.message || 'Cập nhật trạng thái thành công!', severity: 'success'});
+
+    } catch(err) {
+         console.error("Lỗi khi cập nhật trạng thái:", err);
+         const errorMsg = err.response?.data?.message || 'Lỗi! Không thể cập nhật trạng thái.';
+         setSnackbar({open: true, message: errorMsg, severity: 'error'});
+    } finally {
+        setUpdatingStatusId(null);
+    }
+ };
     // === Handlers cho Dialog Gửi Test ===
     const handleOpenSendTestDialog = (applicant) => {
       setSelectedApplicantForTest(applicant);
@@ -361,104 +381,104 @@ const handleEvaluateSubmit = async (evaluationData) => {
                 <TableCell align="center" sx={{width: '25%'}}>Hành động</TableCell>
               </TableRow>
             </TableHead>
-            <TableBody>
-              {applicants.length > 0 ? (
-                applicants.map((app) => (
-                  <TableRow key={app.applicationId} hover>
-                    <TableCell component="th" scope="row">
-                      {app.candidateName}
-                    </TableCell>
-                    <TableCell>
-                      {formatShortDateTime(app.applicationDate)}
-                    </TableCell>
-                    <TableCell align="center">
-                        <FormControl variant="standard" size="small" sx={{ minWidth: 130 }}> {/* Tăng minWidth */}
-                            <Select
-                                value={app.status}
-                                onChange={(e) => handleStatusChange(app.applicationId, e.target.value)}
-                                disabled={updatingStatusId === app.applicationId}
-                                renderValue={(selectedValue) => (
-                                     updatingStatusId === app.applicationId ?
-                                     <CircularProgress size={20} sx={{mx: 'auto', display:'block'}}/> : // Hiển thị loading khi đang đổi
-                                    <Chip label={selectedValue} color={getApplicantStatusColor(selectedValue)} size="small" sx={{width: '100%'}} />
-                                )}
-                                sx={{ '.MuiSelect-select': { p: 0.5 } , '.MuiSelect-select:focus': { backgroundColor: 'transparent' } }} // Style lại Select
-                            >
-                                {applicantStatuses.map(statusOption => (
-                                <MenuItem key={statusOption} value={statusOption}>
-                                     <Chip label={statusOption} color={getApplicantStatusColor(statusOption)} size="small" sx={{width: '100%'}} />
-                                </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </TableCell>
-                     <TableCell align="center">
-                         <Tooltip title="Xem CV">
-                             <span>
-                                <IconButton size="small" onClick={() => handleViewCV(app.cvUrl)} disabled={!app.cvUrl || app.cvUrl === '#'}>
-                                    <ArticleIcon fontSize='small'/>
-                                </IconButton>
-                             </span>
-                         </Tooltip>
-                     </TableCell>
-                    {/* === Cập nhật Cột Hành động === */}
-                    <TableCell align="center">
-                        <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <Tooltip title="Xem hồ sơ tóm tắt">
-                                {/* Gọi handler mới khi bấm nút */}
-                                <IconButton size="small" onClick={() => handleOpenViewProfileDialog(app.candidateId)} >
-                                    <VisibilityIcon fontSize='small'/>
-                                </IconButton>
-                            </Tooltip>                           {/* THÊM NÚT GỬI TEST */}
-                            <Tooltip title="Gửi bài test">
-                                <span>
-                                    <IconButton
-                                        size="small"
-                                        color="secondary" // Màu khác cho nổi bật
-                                        onClick={() => handleOpenSendTestDialog(app)}
-                                        // Disable nếu job này ko có test, hoặc ứng viên đã bị từ chối/đã gửi test/đã mời PV...
-                                        disabled={loadingAssociatedTests || jobAssociatedTests.length === 0 || ['Từ chối', 'Đã gửi bài test', 'Mời phỏng vấn'].includes(app.status)}
-                                    >
-                                        <AssignmentIcon fontSize='small'/>
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                            {/* --- NÚT ĐÁNH GIÁ MỚI --- */}
-                            <Tooltip title={`Đánh giá ${app.candidateName}`}>
-                              <IconButton
-                                size="small"
-                                color="info" // Hoặc màu khác
-                                onClick={() => handleOpenEvaluateDialog(app)} // <<< GỌI HÀM MỞ DIALOG ĐÁNH GIÁ
-                                // Có thể disable nếu chưa qua vòng phỏng vấn/test ?
-                              >
-                              <RateReviewIcon fontSize='small'/> {/* Hoặc GradingIcon */}
-                              </IconButton>
-                            </Tooltip>
-                            {/* --- KẾT THÚC NÚT ĐÁNH GIÁ MỚI --- */}
-                            <Tooltip title={`Mời ${app.candidateName} phỏng vấn/test`}>
-                            <IconButton
-                                size="small"
-                                color="primary"
-                                onClick={() => handleOpenInviteDialog(app)} // <<< Gọi handler mở dialog mời
-                                // Có thể thêm disabled dựa trên status nếu cần
-                                // disabled={['Từ chối', 'Mời phỏng vấn', 'Đã gửi bài test'].includes(app.status)}
-                            >
-                                <MailOutlineIcon fontSize='small'/>
-                            </IconButton>
-                        </Tooltip>
-                        </Stack>
-                    </TableCell>
-                     {/* === Kết thúc Cập nhật === */}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center"> {/* Cập nhật colSpan */}
-                    Chưa có ứng viên nào cho vị trí này.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
+            {/* === BẮT ĐẦU SỬA TỪ ĐÂY === */}
+              <TableBody>
+                            {applicants.length > 0 ? (
+                                applicants.map((app) => {
+                                    // Lấy ID của Application (_id) làm key
+                                    const currentAppId = app._id || app.applicationId;
+                                    // Lấy object thông tin candidate đã được populate
+                                    const candidateInfo = app.candidateId;
+                                    // Kiểm tra xem có đang loading action cho dòng này không
+                                    const isCurrentActionLoading = updatingStatusId === currentAppId; // Hoặc dùng actionLoading state nếu có
+
+                                    return (
+                                        <TableRow key={currentAppId} hover>
+                                            {/* Cột Ứng viên: Truy cập qua candidateInfo */}
+                                            <TableCell component="th" scope="row">
+                                                {candidateInfo?.fullName || 'N/A'}
+                                                {/* Có thể thêm email/phone nếu muốn và nếu đã populate */}
+                                                {/* <Typography variant="caption" display="block">{candidateInfo?.email}</Typography> */}
+                                            </TableCell>
+                                            {/* Cột Ngày ứng tuyển: Dùng createdAt của Application */}
+                                            <TableCell>
+                                                {app.createdAt ? formatShortDateTime(app.createdAt) : 'N/A'}
+                                            </TableCell>
+                                            {/* Cột Trạng thái: Giữ nguyên logic Select, truyền currentAppId */}
+                                            <TableCell align="center">
+                                                <FormControl variant="standard" size="small" sx={{ minWidth: 130 }}>
+                                                    <Select
+                                                        value={app.status}
+                                                        onChange={(e) => handleStatusChange(currentAppId, e.target.value)}
+                                                        disabled={isCurrentActionLoading} // Dùng isCurrentActionLoading
+                                                        renderValue={(selectedValue) => (
+                                                            isCurrentActionLoading ?
+                                                            <CircularProgress size={20} sx={{mx: 'auto', display:'block'}}/> :
+                                                            <Chip label={selectedValue} color={getApplicantStatusColor(selectedValue)} size="small" sx={{width: '100%'}} />
+                                                        )}
+                                                        sx={{ '.MuiSelect-select': { p: 0.5 } , '.MuiSelect-select:focus': { backgroundColor: 'transparent' } }}
+                                                    >
+                                                        {applicantStatuses.map(statusOption => (
+                                                            <MenuItem key={statusOption} value={statusOption}>
+                                                                 <Chip label={statusOption} color={getApplicantStatusColor(statusOption)} size="small" sx={{width: '100%'}} />
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </TableCell>
+                                            {/* Cột CV: Dùng cvFileName và cvUrl từ Application */}
+                                            <TableCell align="center">
+                                                 <Tooltip title={app.cvFileName || "Xem CV"}>
+                                                     <span>
+                                                        <IconButton size="small" onClick={() => handleViewCV(app.cvUrl)} disabled={!app.cvUrl || app.cvUrl === '#'}>
+                                                            <ArticleIcon fontSize='small'/>
+                                                        </IconButton>
+                                                     </span>
+                                                 </Tooltip>
+                                             </TableCell>
+                                            {/* Cột Hành động: Truyền ID/object đúng vào các handler */}
+                                            <TableCell align="center">
+                                                <Stack direction="row" spacing={0.5} justifyContent="center">
+                                                    <Tooltip title="Xem hồ sơ tóm tắt">
+                                                        {/* Truyền ID của Candidate */}
+                                                        <IconButton size="small" onClick={() => handleOpenViewProfileDialog(candidateInfo?._id || candidateInfo?.id)} disabled={!candidateInfo} >
+                                                            <VisibilityIcon fontSize='small'/>
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Gửi bài test">
+                                                        <span>
+                                                            {/* Truyền cả object 'app' vì dialog cần cả Application ID và Candidate Name */}
+                                                            <IconButton size="small" color="secondary" onClick={() => handleOpenSendTestDialog(app)} disabled={isCurrentActionLoading /* || logic khác */} >
+                                                                <AssignmentIcon fontSize='small'/>
+                                                            </IconButton>
+                                                        </span>
+                                                    </Tooltip>
+                                                    <Tooltip title={`Đánh giá ${candidateInfo?.fullName || 'Ứng viên'}`}>
+                                                      {/* Truyền cả object 'app' */}
+                                                      <IconButton size="small" color="info" onClick={() => handleOpenEvaluateDialog(app)} disabled={isCurrentActionLoading}>
+                                                         <RateReviewIcon fontSize='small'/>
+                                                      </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title={`Mời ${candidateInfo?.fullName || 'Ứng viên'} phỏng vấn/test`}>
+                                                        {/* Truyền cả object 'app' */}
+                                                        <IconButton size="small" color="primary" onClick={() => handleOpenInviteDialog(app)} disabled={isCurrentActionLoading} >
+                                                            <MailOutlineIcon fontSize='small'/>
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Stack>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} align="center"> {/* Cập nhật colSpan */}
+                                        Chưa có ứng viên nào cho vị trí này.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+              </TableBody>
+                      {/* === KẾT THÚC SỬA === */}
           </Table>
         </TableContainer>
       )}

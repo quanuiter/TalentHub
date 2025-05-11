@@ -1,40 +1,57 @@
 // backend/routes/jobRoutes.js
 const express = require('express');
 const router = express.Router();
-const jobController = require('../controllers/jobController'); // Import job controller
-const { protect, authorize } = require('../middleware/authMiddleware'); // Import middlewares
+const jobController = require('../controllers/jobController');
+const applicationController = require('../controllers/applicationController');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 // --- Định nghĩa các Routes cho Jobs ---
 
 // GET /api/jobs - Lấy danh sách tất cả Jobs (công khai)
 router.get('/', jobController.getAllJobs);
 
+// <<< ĐẶT ROUTE /my-jobs LÊN TRƯỚC /:id >>>
+// GET /api/jobs/my-jobs - Lấy jobs của employer đang đăng nhập
+router.get(
+    '/my-jobs',        // Đường dẫn cụ thể
+    protect,           // Cần đăng nhập
+    authorize('employer'), // Cần là employer
+    jobController.getEmployerJobs // Hàm controller đúng
+);
+
 // GET /api/jobs/:id - Lấy chi tiết một Job (công khai)
+// Route này phải đặt sau /my-jobs để tránh xung đột
 router.get('/:id', jobController.getJobById);
 
-// POST /api/jobs - Tạo một Job mới (yêu cầu đăng nhập, vai trò 'employer')
+// POST /api/jobs - Tạo một Job mới
 router.post(
-    '/', // Đường dẫn gốc cho jobs
-    protect, // 1. Middleware kiểm tra token JWT hợp lệ
-    authorize('employer'), // 2. Middleware kiểm tra vai trò phải là 'employer'
-    jobController.createJob // 3. Hàm controller xử lý tạo job
+    '/',
+    protect,
+    authorize('employer'),
+    jobController.createJob
 );
 
-// PUT /api/jobs/:id - Cập nhật một Job (yêu cầu đăng nhập, vai trò 'employer', chủ sở hữu)
+// PUT /api/jobs/:id - Cập nhật một Job
 router.put(
-    '/:id', // Đường dẫn chứa ID của job cần cập nhật
+    '/:id',
     protect,
     authorize('employer'),
-    jobController.updateJob // Controller sẽ kiểm tra quyền sở hữu bên trong
+    jobController.updateJob
 );
 
-// DELETE /api/jobs/:id - Xóa một Job (yêu cầu đăng nhập, vai trò 'employer', chủ sở hữu)
+// DELETE /api/jobs/:id - Xóa một Job
 router.delete(
-    '/:id', // Đường dẫn chứa ID của job cần xóa
+    '/:id',
     protect,
     authorize('employer'),
-    jobController.deleteJob // Controller sẽ kiểm tra quyền sở hữu bên trong
+    jobController.deleteJob
+);
+// GET /api/jobs/:jobId/applicants - Employer lấy danh sách ứng viên cho 1 job
+router.get(
+    '/:jobId/applicants', 
+    protect, 
+    authorize('employer'), 
+    applicationController.getApplicantsForJob
 );
 
-
-module.exports = router; // Export router để server.js sử dụng
+module.exports = router;

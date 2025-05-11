@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom'; // Import Link
-import { fetchJobById } from '../data/mockJobs'; // Hàm lấy dữ liệu giả
+import apiService from '../services/api';
+
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ApplyJobDialog from '../components/candidate/ApplyJobDialog'; // Import dialog mới
 import { useAuth } from '../contexts/AuthContext'; // Import useAuth để kiểm tra đăng nhập
@@ -66,7 +67,8 @@ function JobDetailPage() {
       setLoading(true);
       setError(null); // Reset lỗi trước khi fetch
       try {
-        const fetchedJob = await fetchJobById(jobId);
+        const response = await apiService.getJobDetailsApi(jobId);
+        const fetchedJob = response.data;
         if (fetchedJob) {
           setJob(fetchedJob);
         } else {
@@ -176,14 +178,19 @@ function JobDetailPage() {
         {/* Yêu cầu ứng viên */}
         <Box sx={{ mb: 4 }}>
           <Typography variant="h6" gutterBottom>Yêu cầu ứng viên</Typography>
-          {job.requirements && job.requirements.length > 0 ? (
-            job.requirements.map((req, index) => (
+          {job.requirements && typeof job.requirements === 'string' && job.requirements.trim().length > 0 ? (
+            // 1. Tách chuỗi thành mảng các dòng dựa trên dấu xuống dòng (\n)
+            // 2. Lọc bỏ các dòng trống (nếu có)
+            // 3. Map qua mảng các dòng đã tách
+            job.requirements.split('\n').filter(line => line.trim() !== '').map((req, index) => (
               <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                  <CheckCircleOutlineIcon color="primary" sx={{ mr: 1, fontSize: '1.2rem' }}/>
-                 <Typography variant="body1">{req}</Typography>
+                 {/* Hiển thị từng dòng yêu cầu */}
+                 <Typography variant="body1">{req.trim()}</Typography>
               </Box>
             ))
           ) : (
+            // Nếu không có requirements hoặc không phải là string, hiển thị thông báo
             <Typography variant="body1">Chưa cập nhật.</Typography>
           )}
         </Box>
@@ -191,14 +198,17 @@ function JobDetailPage() {
         {/* Quyền lợi */}
         <Box sx={{ mb: 4 }}>
           <Typography variant="h6" gutterBottom>Quyền lợi</Typography>
-           {job.benefits && job.benefits.length > 0 ? (
-            job.benefits.map((benefit, index) => (
+          {job.benefits && typeof job.benefits === 'string' && job.benefits.trim().length > 0 ? (
+             // Tách chuỗi benefits thành mảng các dòng, lọc dòng trống và map
+            job.benefits.split('\n').filter(line => line.trim() !== '').map((benefit, index) => (
                <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                  <CheckCircleOutlineIcon color="primary" sx={{ mr: 1, fontSize: '1.2rem' }}/>
-                 <Typography variant="body1">{benefit}</Typography>
+                 {/* Hiển thị từng quyền lợi */}
+                 <Typography variant="body1">{benefit.trim()}</Typography>
               </Box>
             ))
           ) : (
+            // Nếu không có benefits hoặc không phải string, hiển thị thông báo
             <Typography variant="body1">Chưa cập nhật.</Typography>
           )}
         </Box>

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-
+import { useAuth } from '../contexts/AuthContext';
 // Import Material UI components & Icons
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -29,13 +29,14 @@ import GoogleIcon from '@mui/icons-material/Google'; // Icon Google (cần cài 
 
 function RegisterPage() {
   const navigate = useNavigate();
-
+  const { register } = useAuth(); // Lấy hàm register từ context
   // State cho các trường input
   const [formData, setFormData] = useState({
     fullName: '', // Thay firstName/lastName bằng fullName
     email: '',
     password: '',
     role: 'candidate',
+    companyName: ''
   });
   const [confirmPassword, setConfirmPassword] = useState(''); // Tách confirmPassword ra
   const [agreeToTerms, setAgreeToTerms] = useState(false); // State cho checkbox điều khoản
@@ -75,44 +76,57 @@ function RegisterPage() {
   };
 
   // --- Xử lý khi submit form Email ---
-  const handleSubmitEmail = async (event) => {
+  const handleSubmitEmail = async (event) => { // <<< THÊM ASYNC
     event.preventDefault();
     setLoading(true);
     setError(null);
 
-    // --- Validation ---
+    // --- Validation (giữ nguyên) ---
     if (!formData.fullName || !formData.email || !formData.password || !confirmPassword) {
-      setError("Vui lòng điền đầy đủ thông tin bắt buộc.");
-      setLoading(false);
-      return;
+      setError("Vui lòng điền đầy đủ thông tin bắt buộc."); setLoading(false); return;
     }
     if (formData.password !== confirmPassword) {
-      setError("Mật khẩu và xác nhận mật khẩu không khớp.");
-      setLoading(false);
-      return;
+      setError("Mật khẩu và xác nhận mật khẩu không khớp."); setLoading(false); return;
     }
     if (formData.password.length < 6) {
-      setError("Mật khẩu phải có ít nhất 6 ký tự.");
-      setLoading(false);
-      return;
+      setError("Mật khẩu phải có ít nhất 6 ký tự."); setLoading(false); return;
     }
     if (!agreeToTerms) {
-      setError("Bạn cần đồng ý với Điều khoản và Chính sách để đăng ký.");
-      setLoading(false);
-      return;
+      setError("Bạn cần đồng ý với Điều khoản và Chính sách để đăng ký."); setLoading(false); return;
     }
 
-    // --- Gọi API Backend (Placeholder) ---
-    console.log("Dữ liệu đăng ký Email (giả lập):", formData);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-     if (formData.email === "exist@example.com") {
-        setError("Email này đã được sử dụng (demo).");
-     } else {
-        console.log("Đăng ký Email thành công (giả lập)");
-        navigate('/login');
-     }
-    setLoading(false);
+    // --- Gọi API Backend thông qua context ---
+    try {
+        // Chuẩn bị data gửi đi (có thể bỏ confirmPassword)
+        const userData = {
+            fullName: formData.fullName,
+            email: formData.email,
+            password: formData.password,
+            role: formData.role,
+            companyName: formData.role === 'employer' ? formData.companyName : undefined, // Gửi companyName nếu là employer
+        };
+        if (formData.role === 'employer' && !userData.companyName) {
+          setError("Vui lòng nhập Tên công ty.");
+          setLoading(false);
+          return;
+      }
+        // Gọi hàm register từ context
+        const result = await register(userData); // <<< DÙNG AWAIT
+
+        console.log("Registration successful (API Response):", result);
+        // Đăng ký thành công, backend đã trả về 201
+        // Chuyển hướng người dùng đến trang đăng nhập để họ đăng nhập lại
+        navigate('/login', { state: { registrationSuccess: true } }); // Gửi kèm state để trang login có thể hiển thị thông báo (tùy chọn)
+
+    } catch (err) {
+        console.error("[RegisterPage] Registration failed:", err);
+        // Hiển thị lỗi trả về từ API (nếu có) hoặc lỗi chung
+        setError(err.response?.data?.message || err.message || "Đăng ký thất bại. Vui lòng thử lại.");
+        setLoading(false);
+    }
+    // Không cần setLoading(false) ở đây nữa vì đã có trong catch hoặc sau khi navigate
   };
+  // --- KẾT THÚC SỬA ĐỔI ---
 
   return (
     // Container giới hạn chiều rộng và căn giữa
@@ -276,7 +290,22 @@ function RegisterPage() {
                     </RadioGroup>
                 </FormControl>
              </Grid>
-
+             {formData.role === 'employer' && (
+                     <Grid item xs={12}>
+                         <TextField
+                             name="companyName" // <<< name phải là companyName
+                             required // Bắt buộc nếu là employer
+                             fullWidth
+                             id="companyName"
+                             label="Tên công ty"
+                             value={formData.companyName} // <<< Lấy từ state
+                             onChange={handleChange} // <<< Dùng chung handleChange
+                             disabled={loading}
+                             variant="outlined"
+                             sx={{ mt: 1 }} // Thêm margin top nhỏ
+                         />
+                     </Grid>
+                 )}
              {/* Terms and Conditions Checkbox */}
              <Grid item xs={12}>
                  <FormControlLabel

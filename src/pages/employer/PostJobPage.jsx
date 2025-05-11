@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext'; // Để lấy thông tin NTD/Công ty nếu cần
 import { fetchEmployerTests } from '../../data/mockJobs';
 import { fetchEmployerJobDetail, createEmployerJob, updateEmployerJob } from '../../data/mockJobs'; // Đảm bảo đúng đường dẫn
-
+import apiService from '../../services/api';
 // Import MUI components
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -52,6 +52,7 @@ const initialJobData = {
   applicationDeadline: '', experienceLevel: '', numberOfHires: 1,
   associatedTests: []
 };
+
 function PostJobPage() {
   const navigate = useNavigate();
   const { jobId } = useParams(); // <<< Lấy jobId từ URL
@@ -101,54 +102,69 @@ function PostJobPage() {
   // === Kết thúc useEffect ===
   useEffect(() => {
     const loadJobDetails = async () => {
-      if (!isEditMode || !authState.user?.id) return; // Chỉ chạy khi là edit mode
-
+      if (!isEditMode || !jobId) {
+          setLoadingJobDetails(false);
+          return;
+      }
       setLoadingJobDetails(true);
       setFetchError(null);
       try {
-        const data = await fetchEmployerJobDetail(authState.user.id, jobId);
-        if (data) {
-          // Map dữ liệu trả về vào state form
-          // Cần fetch chi tiết các test dựa vào associatedTestIds
-          let associatedTestsDetails = [];
-          if(data.associatedTestIds && data.associatedTestIds.length > 0) {
-              try {
-                 setLoadingTests(true);
-                 const allTests = await fetchEmployerTests(authState.user.id);
-                 associatedTestsDetails = allTests.filter(test => data.associatedTestIds.includes(test.testId));
-              } catch(testErr){ console.error("Lỗi tải associated tests:", testErr)}
-               finally { setLoadingTests(false); }
-          }
+        // Gọi API công khai lấy chi tiết job
+        const response = await apiService.getJobDetailsApi(jobId);
+        const data = response.data;
 
-          setJobData({
+        if (data) {
+           // --- Xử lý Map dữ liệu ---
+            let loadedIndustry = null;
+            if (data.industry) {
+                // Thử tìm trong mockIndustries bằng label hoặc id (tùy backend trả về gì)
+                loadedIndustry = mockIndustries.find(i => i.label === data.industry || i.id === data.industry) || null;
+            }
+
+            let loadedAssociatedTests = [];
+            // Giả sử API getJobDetailsApi trả về mảng ID của test trong data.associatedTests
+            // Và availableTests đã được load ở useEffect trên
+             if (data.associatedTests && data.associatedTests.length > 0 && availableTests.length > 0) {
+                loadedAssociatedTests = availableTests.filter(test =>
+                    data.associatedTests.includes(test.testId || test._id) // So sánh ID
+                );
+            }
+
+            setJobData({
               title: data.title || '',
-              industry: data.industry || null, // Giả sử fetch trả về object industry
-              jobType: data.jobType || '',
+              industry: loadedIndustry,
+              jobType: data.type || '', // API trả về 'type'
               location: data.location || '',
               salary: data.salary || '',
               description: data.description || '',
               requirements: data.requirements || '',
               benefits: data.benefits || '',
               requiredSkills: Array.isArray(data.requiredSkills) ? data.requiredSkills : [],
-              applicationDeadline: data.applicationDeadline || '',
+              applicationDeadline: data.applicationDeadline ? data.applicationDeadline.split('T')[0] : '',
               experienceLevel: data.experienceLevel || '',
               numberOfHires: data.numberOfHires || 1,
-              associatedTests: associatedTestsDetails, // Lưu mảng object test
-          });
+              associatedTests: loadedAssociatedTests, // Gán mảng object test đã tìm được
+            });
         } else {
           setFetchError(`Không tìm thấy tin tuyển dụng với ID: ${jobId}`);
-          setJobData(initialJobData); // Reset về form trống nếu không tìm thấy
+          setJobData(initialJobData);
         }
       } catch (err) {
         console.error("Lỗi tải chi tiết tin đăng:", err);
-        setFetchError("Không thể tải chi tiết tin tuyển dụng.");
+        const errorMsg = err.response?.data?.message || err.message || "Không thể tải chi tiết tin tuyển dụng.";
+        setFetchError(errorMsg);
       } finally {
         setLoadingJobDetails(false);
       }
     };
 
-    loadJobDetails();
-  }, [jobId, isEditMode, authState.user?.id]); // Phụ thuộc vào jobId
+    // Chỉ load job details khi availableTests đã sẵn sàng (hoặc không cần test)
+     if (!loadingTests || availableTests.length === 0) {
+        loadJobDetails();
+     }
+
+  }, [jobId, isEditMode, availableTests, loadingTests]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     setJobData(prev => ({ ...prev, [name]: value }));
@@ -173,77 +189,70 @@ function PostJobPage() {
     event.preventDefault();
     setIsSubmitting(true);
     setSnackbar({ ...snackbar, open: false });
-    setFetchError(null); // Xóa lỗi cũ khi submit
+    // Không cần setFetchError(null) ở đây vì lỗi submit khác lỗi fetch
 
-    // Validation (giữ nguyên)
+    // --- Validation (Giữ nguyên) ---
     if (!jobData.title || !jobData.industry || !jobData.jobType || !jobData.location || !jobData.description || !jobData.requirements) {
         setSnackbar({ open: true, message: 'Vui lòng điền đầy đủ các trường bắt buộc (*)', severity: 'error'});
         setIsSubmitting(false);
         return;
     }
 
-    // --- Gọi API đăng tin (Placeholder) ---
+    // --- Chuẩn bị dữ liệu gửi đi ---
     const dataToSend = {
       title: jobData.title,
-      industryId: jobData.industry?.id, // Gửi ID
-      jobType: jobData.jobType,
+      // Gửi ID hoặc label tùy backend mong muốn
+      industry: jobData.industry?.label || jobData.industry?.id || jobData.industry,
+      type: jobData.jobType,
       location: jobData.location,
       salary: jobData.salary,
       description: jobData.description,
       requirements: jobData.requirements,
       benefits: jobData.benefits,
       requiredSkills: jobData.requiredSkills,
-      applicationDeadline: jobData.applicationDeadline || null, // Gửi null nếu trống
+      applicationDeadline: jobData.applicationDeadline || null,
       experienceLevel: jobData.experienceLevel,
-      numberOfHires: parseInt(jobData.numberOfHires, 10) || 1, // Chuyển sang số nguyên
-      associatedTestIds: jobData.associatedTests.map(test => test.testId), // Chỉ gửi mảng ID
-  };
-  try {
-        let message = '';
+      numberOfHires: parseInt(jobData.numberOfHires, 10) || 1,
+      // Không cần gửi companyName/companyId vì backend lấy từ token/postedBy
+      // Gửi mảng ID của associatedTests
+      //associatedTests: jobData.associatedTests.map(test => test.testId || test._id),
+      associatedTests: [],
+      // Có thể thêm status nếu cho phép sửa status ở đây (ví dụ: 'Draft')
+    };
+    console.log('--- Dữ liệu gửi đi để tạo Job ---'); 
+    console.log(dataToSend);                          
+    try {
+        let response;
+        let successMessage = '';
         if (isEditMode) { // --- Chế độ Sửa ---
-            console.log("Updating Job Data (mock):", jobId, dataToSend);
-            await updateEmployerJob(authState.user.id, jobId, dataToSend);
-            message = 'Cập nhật tin tuyển dụng thành công!';
-            setSnackbar({ open: true, message: message, severity: 'success'});
-            // Có thể điều hướng về trang quản lý sau khi sửa
-            // navigate('/employer/manage-jobs');
+            console.log("Updating Job Data (API):", jobId, dataToSend);
+            // <<< GỌI API UPDATE >>>
+            response = await apiService.updateJobApi(jobId, dataToSend);
+            successMessage = response.data?.message || 'Cập nhật tin tuyển dụng thành công!';
         } else { // --- Chế độ Tạo mới ---
-            console.log("Creating Job Data (mock):", dataToSend);
-            await createEmployerJob(authState.user.id, dataToSend);
-            message = 'Đăng tin tuyển dụng thành công!';
-            setSnackbar({ open: true, message: message, severity: 'success'});
-            setJobData(initialJobData); // Reset form tạo mới
-             // navigate('/employer/manage-jobs'); // Điều hướng về trang quản lý
+            console.log("Creating Job Data (API):", dataToSend);
+             // <<< GỌI API CREATE >>>
+            response = await apiService.createJobApi(dataToSend);
+            successMessage = response.data?.message || 'Đăng tin tuyển dụng thành công!';
         }
+
+         console.log("API success response:", response.data);
+         setSnackbar({ open: true, message: successMessage, severity: 'success'});
+
+         // Điều hướng về trang quản lý sau khi thành công
+         setTimeout(() => {
+             navigate('/employer/manage-jobs');
+         }, 1000); // Chờ 1s để xem thông báo
+
     } catch (err) {
         console.error("Lỗi khi lưu tin đăng:", err);
-        setSnackbar({ open: true, message: `Lỗi! Không thể lưu tin. (${err.message})`, severity: 'error'});
+         const errorMsg = err.response?.data?.message || err.message || 'Lỗi! Không thể lưu tin.';
+         setSnackbar({ open: true, message: errorMsg, severity: 'error'});
     } finally {
         setIsSubmitting(false);
     }
-    
-    delete dataToSend.industry; // Xóa object industry đi
-
-    console.log("Submitting Job Data (mock):", dataToSend);
-    // API thật: await api.post('/api/jobs', dataToSend);
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Giả lập độ trễ
-
-    const success = true; // Giả lập thành công
-
-    if (success) {
-       setSnackbar({ open: true, message: 'Đăng tin tuyển dụng thành công!', severity: 'success'});
-       // Reset form hoặc điều hướng
-       setJobData({ /* ... giá trị trống ... */ 
-        associatedTests: []
-       }); // Reset form
-       // navigate('/employer/manage-jobs'); // Hoặc điều hướng
-    } else {
-        setSnackbar({ open: true, message: 'Lỗi! Không thể đăng tin.', severity: 'error'});
-    }
-
-    setIsSubmitting(false);
   };
-
+  // --- Kết thúc hàm submit ---
   // === Handler mới cho Autocomplete chọn Test ===
   const handleTestsChange = (event, newValue) => {
     setJobData(prev => ({

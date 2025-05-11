@@ -74,7 +74,7 @@ function JobCard({ job, showSaveButton = true, onUnsave }) {
             lineHeight: 1.4,
           }}
         >
-          <RouterLink to={`/jobs/${job.id}`}>{job.title}</RouterLink>
+          <RouterLink to={`/jobs/${job._id || job.id}`}>{job.title}</RouterLink>
         </Typography>
 
         <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
@@ -144,7 +144,9 @@ function JobCard({ job, showSaveButton = true, onUnsave }) {
           }}
         >
           <EventIcon sx={{ mr: 0.5, fontSize: "0.875rem" }} />
-          <Typography variant="caption">Đăng ngày: {new Date(job.datePosted).toLocaleDateString("vi-VN")}</Typography>
+          <Typography variant="caption">
+            Đăng ngày: {job.createdAt ? new Date(job.createdAt).toLocaleDateString("vi-VN") : 'N/A'}
+          </Typography>
         </Box>
       </CardContent>
 
@@ -165,7 +167,7 @@ function JobCard({ job, showSaveButton = true, onUnsave }) {
             size="small"
             variant="outlined"
             color="error"
-            onClick={() => onUnsave(job.id)}
+            onClick={() => onUnsave(job._id)}
             startIcon={<BookmarkRemoveIcon />}
             sx={{
               borderRadius: "20px",
@@ -193,7 +195,7 @@ function JobCard({ job, showSaveButton = true, onUnsave }) {
           size="small"
           variant="contained"
           component={RouterLink}
-          to={`/jobs/${job.id}`}
+          to={`/jobs/${job._id}`}
           sx={{
             borderRadius: "20px",
             textTransform: "none",

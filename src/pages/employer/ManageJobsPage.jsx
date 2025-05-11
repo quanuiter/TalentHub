@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import apiService from '../../services/api';
 // Import hàm fetch/action mới
 import { fetchEmployerJobs, toggleJobStatus, deleteEmployerJob } from '../../data/mockJobs'; // Giả sử bạn lưu vào file riêng
 import ConfirmDialog from '../../components/common/ConfirmDialog'; // Dùng lại ConfirmDialog
@@ -59,31 +60,41 @@ function ManageJobsPage() {
   const [deletingJobId, setDeletingJobId] = useState(null);
 
   const loadJobs = async () => {
-    console.log('[ManageJobsPage] loadJobs called. User ID:', authState.user?.id); // <<< Giữ lại log này
-    if (!authState.user?.id) {
-        console.log('[ManageJobsPage] User ID not found, aborting load.');
-        setError("Không thể xác định nhà tuyển dụng.");
-        setLoading(false); // <<< THÊM setLoading(false) Ở ĐÂY
-        return;
-    }
+    // Bỏ log không cần thiết
+    // console.log('[ManageJobsPage] loadJobs called. User ID:', authState.user?.id);
+    // Không cần kiểm tra user ID nữa vì API sẽ kiểm tra token
     setLoading(true);
     setError(null);
     try {
-      console.log('[ManageJobsPage] Calling fetchEmployerJobs...');
-      const data = await fetchEmployerJobs(authState.user.id);
-      console.log('[ManageJobsPage] fetchEmployerJobs success. Data received:', data);
-      setJobs(data);
+      // console.log('[ManageJobsPage] Calling getEmployerJobsApi...'); // Có thể giữ lại log nếu muốn debug
+      // Gọi API mới để lấy jobs của employer hiện tại
+      const response = await apiService.getEmployerJobsApi();
+      // console.log('[ManageJobsPage] API success. Data received:', response.data);
+
+      if (response && Array.isArray(response.data)) {
+           // Sắp xếp mới nhất lên đầu (ví dụ)
+           response.data.sort((a, b) => new Date(b.createdAt || b.datePosted) - new Date(a.createdAt || a.datePosted));
+           setJobs(response.data);
+      } else {
+           console.error("Employer jobs API response is not an array:", response);
+           setJobs([]);
+           setError("Dữ liệu tin đăng trả về không hợp lệ.");
+      }
     } catch (err) {
-      console.error("[ManageJobsPage] Error loading jobs:", err);
-      setError("Không thể tải danh sách tin đăng.");
+      console.error("[ManageJobsPage] Error loading employer jobs:", err);
+      // Hiển thị lỗi từ API nếu có, nếu không hiển thị lỗi chung
+      const errorMsg = err.response?.data?.message || err.message || "Không thể tải danh sách tin đăng.";
+      setError(errorMsg);
+      setJobs([]); // Đảm bảo jobs rỗng khi lỗi
     } finally {
-      console.log('[ManageJobsPage] Reached finally block. Setting loading to false.'); // <<< Giữ lại log này
+      // console.log('[ManageJobsPage] Reached finally block. Setting loading to false.');
       setLoading(false);
     }
   };
 
   useEffect(() => {
     loadJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authState.user?.id]);
 
   const handleCloseSnackbar = (event, reason) => {
@@ -93,10 +104,14 @@ function ManageJobsPage() {
 
   // --- Mock Handlers for Actions ---
   const handleEditJob = (jobId) => {
-    console.log("Edit job:", jobId);
-    // navigate(`/employer/edit-job/${jobId}`); // Điều hướng đến trang sửa tin (tạo sau)
-     setSnackbar({ open: true, message: `Chức năng sửa tin ${jobId} sẽ được làm sau!`, severity: 'info' });
-  };
+    console.log("Navigating to edit job with ID:", jobId); // Kiểm tra xem jobId có phải undefined không
+    if (jobId) { // Chỉ điều hướng nếu có jobId
+       navigate(`/employer/edit-job/${jobId}`);
+    } else {
+       console.error("Cannot navigate to edit page: Job ID is undefined!");
+       // Có thể hiển thị thông báo lỗi cho người dùng
+    }
+};
 
   const handleViewApplicants = (jobId) => {
     console.log("View applicants for job:", jobId);
@@ -105,22 +120,28 @@ function ManageJobsPage() {
   };
 
   const handleToggleStatus = async (jobId, currentStatus) => {
-      if (!authState.user?.id || actionLoading.id) return;
-      setActionLoading({type: 'toggle', id: jobId});
-      setSnackbar({ ...snackbar, open: false });
-      try {
-          const newStatus = await toggleJobStatus(authState.user.id, jobId, currentStatus);
-           setJobs(prevJobs => prevJobs.map(job =>
-               job.id === jobId ? { ...job, status: newStatus } : job
-           ));
-           setSnackbar({ open: true, message: `Đã ${newStatus === 'Active' ? 'mở lại' : 'đóng'} tin tuyển dụng!`, severity: 'success' });
-      } catch(err) {
-           console.error("Lỗi khi đổi trạng thái:", err);
-           setSnackbar({ open: true, message: 'Lỗi! Không thể đổi trạng thái tin.', severity: 'error' });
-      } finally {
-          setActionLoading({type: null, id: null});
-      }
-  };
+    if (actionLoading.id) return;
+    const newStatus = currentStatus === 'Active' ? 'Closed' : 'Active';
+    setActionLoading({type: 'toggle', id: jobId});
+    setSnackbar({ ...snackbar, open: false });
+    try {
+        // <<< GỌI API CẬP NHẬT (chỉ cập nhật status) >>>
+        // Dùng lại API update nhưng chỉ gửi trường status
+        const response = await apiService.updateJobApi(jobId, { status: newStatus });
+
+         // Cập nhật UI
+         setJobs(prevJobs => prevJobs.map(job =>
+             (job._id || job._id) === jobId ? { ...job, status: newStatus } : job
+         ));
+         setSnackbar({ open: true, message: response.data?.message || `Đã ${newStatus === 'Active' ? 'mở lại' : 'đóng'} tin!`, severity: 'success' });
+    } catch(err) {
+         console.error("Lỗi khi đổi trạng thái:", err);
+         const errorMsg = err.response?.data?.message || 'Lỗi! Không thể đổi trạng thái tin.';
+         setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+    } finally {
+        setActionLoading({type: null, id: null});
+    }
+};
 
   const handleDeleteClick = (jobId) => {
       setDeletingJobId(jobId);
@@ -133,18 +154,23 @@ function ManageJobsPage() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!authState.user?.id || !deletingJobId || actionLoading.id) return;
-    const jobIdToDelete = deletingJobId; // Lưu lại id trước khi đóng dialog
-    handleCloseDeleteDialog(); // Đóng dialog trước khi gọi API
+    if (!deletingJobId || actionLoading.id) return; // Thêm kiểm tra actionLoading.id
+    const jobIdToDelete = deletingJobId;
+    handleCloseDeleteDialog();
     setActionLoading({type: 'delete', id: jobIdToDelete});
     setSnackbar({ ...snackbar, open: false });
     try {
-        await deleteEmployerJob(authState.user.id, jobIdToDelete);
-        setJobs(prevJobs => prevJobs.filter(job => job.id !== jobIdToDelete)); // Xóa khỏi state
-        setSnackbar({ open: true, message: 'Đã xóa tin tuyển dụng thành công!', severity: 'success' });
+        // Gọi API xóa job thật
+        const response = await apiService.deleteJobApi(jobIdToDelete);
+
+        // Cập nhật lại danh sách jobs trên UI sau khi xóa thành công
+        setJobs(prevJobs => prevJobs.filter(job => (job._id || job._id) !== jobIdToDelete)); // Dùng _id hoặc id tùy backend trả về
+
+        setSnackbar({ open: true, message: response.data?.message || 'Đã xóa tin tuyển dụng thành công!', severity: 'success' });
     } catch(err) {
          console.error("Lỗi khi xóa tin:", err);
-         setSnackbar({ open: true, message: 'Lỗi! Không thể xóa tin tuyển dụng.', severity: 'error' });
+         const errorMsg = err.response?.data?.message || err.message || 'Lỗi! Không thể xóa tin tuyển dụng.';
+         setSnackbar({ open: true, message: errorMsg, severity: 'error' });
     } finally {
          setActionLoading({type: null, id: null});
     }
@@ -186,14 +212,14 @@ function ManageJobsPage() {
             <TableBody>
               {jobs.length > 0 ? (
                 jobs.map((job) => (
-                  <TableRow key={job.id} hover> {/* Thêm hover effect */}
+                  <TableRow key={job._id} hover> {/* Thêm hover effect */}
                     <TableCell component="th" scope="row">
                       <Typography variant="subtitle2">{job.title}</Typography>
                        {/* Có thể thêm link đến trang job gốc nếu cần */}
-                       {/* <Link component={RouterLink} to={`/jobs/${job.originalJobId || job.id}`} variant="caption">Xem tin gốc</Link> */}
+                       {/* <Link component={RouterLink} to={`/jobs/${job.originalJobId || job._id}`} variant="caption">Xem tin gốc</Link> */}
                     </TableCell>
                     <TableCell>
-                      {job.datePosted ? new Date(job.datePosted).toLocaleDateString('vi-VN') : '-'}
+                      {job.createdAt ? new Date(job.createdAt).toLocaleDateString('vi-VN') : '-'}
                       {job.applicationDeadline && (
                         <Typography variant="caption" display="block">
                             Hạn: {new Date(job.applicationDeadline).toLocaleDateString('vi-VN')}
@@ -209,7 +235,7 @@ function ManageJobsPage() {
                     </TableCell>
                     <TableCell align="center">
                          {/* Link đến trang xem ứng viên */}
-                        <Link component={RouterLink} to={`#`} /* to={`/employer/manage-jobs/${job.id}/applicants`} */ underline="hover">
+                        <Link component={RouterLink} to={`#`} /* to={`/employer/manage-jobs/${job._id}/applicants`} */ underline="hover">
                             {job.applicantCount ?? 0}
                         </Link>
                     </TableCell>
@@ -219,9 +245,9 @@ function ManageJobsPage() {
                             <Tooltip title="Sửa tin">
                               <IconButton
                                 size="small"
-                                disabled={actionLoading.id === job.id}
+                                disabled={actionLoading.id === job._id}
                                 component={RouterLink} // <<< Dùng RouterLink
-                                to={`/employer/edit-job/${job.id}`} // <<< Trỏ đến route edit
+                                to={`/employer/edit-job/${job._id}`} // <<< Trỏ đến route edit
                               >
                                 <EditIcon fontSize='small'/>
                                 </IconButton>
@@ -230,10 +256,10 @@ function ManageJobsPage() {
                             <IconButton
                                         size="small"
                                         // Bỏ onClick nếu có
-                                        // onClick={() => handleViewApplicants(job.id)}
-                                        disabled={actionLoading.id === job.id}
+                                        // onClick={() => handleViewApplicants(job._id)}
+                                        disabled={actionLoading.id === job._id}
                                         component={RouterLink} // <<< Thêm component RouterLink
-                                        to={`/employer/jobs/${job.id}/applicants`} // <<< Trỏ đến route mới với job.id
+                                        to={`/employer/jobs/${job._id}/applicants`} // <<< Trỏ đến route mới với job._id
                                     >
                                 <VisibilityIcon fontSize='small'/>
                                 </IconButton>
@@ -243,11 +269,11 @@ function ManageJobsPage() {
                                 <span> {/* Thêm span để Tooltip hoạt động khi disabled */}
                                     <IconButton
                                         size="small"
-                                        onClick={() => handleToggleStatus(job.id, job.status)}
-                                        disabled={actionLoading.id === job.id || job.status === 'Draft'} // Không toggle tin Nháp
+                                        onClick={() => handleToggleStatus(job._id, job.status)}
+                                        disabled={actionLoading.id === job._id || job.status === 'Draft'} // Không toggle tin Nháp
                                         color={job.status === 'Active' ? 'warning' : 'success'}
                                     >
-                                        {actionLoading.type === 'toggle' && actionLoading.id === job.id
+                                        {actionLoading.type === 'toggle' && actionLoading.id === job._id
                                             ? <CircularProgress size={18} color="inherit"/>
                                             : (job.status === 'Active' ? <ToggleOffIcon fontSize='small'/> : <ToggleOnIcon fontSize='small'/>)
                                         }
@@ -259,10 +285,10 @@ function ManageJobsPage() {
                                     <IconButton
                                         size="small"
                                         color="error"
-                                        onClick={() => handleDeleteClick(job.id)}
-                                        disabled={actionLoading.id === job.id}
+                                        onClick={() => handleDeleteClick(job._id)}
+                                        disabled={actionLoading.id === job._id}
                                     >
-                                         {actionLoading.type === 'delete' && actionLoading.id === job.id
+                                         {actionLoading.type === 'delete' && actionLoading.id === job._id
                                             ? <CircularProgress size={18} color="inherit"/>
                                             : <DeleteIcon fontSize='small'/>
                                         }

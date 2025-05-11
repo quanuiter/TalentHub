@@ -1,7 +1,7 @@
 // src/pages/LoginPage.jsx
 
 import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';// Import context để lấy hàm login
 
 // Import Material UI components
@@ -21,6 +21,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation(); // Lấy thông tin location
+  const from = location.state?.from?.pathname || (new URLSearchParams(location.search)).get('redirect') || "/";
   const { login } = useAuth(); // <<< LẤY HÀM LOGIN TỪ CONTEXT
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,30 +32,39 @@ function LoginPage() {
 
   // --- SỬA LẠI HOÀN TOÀN HÀM NÀY ---
 // src/pages/LoginPage.jsx
-const handleSubmit = (event) => {
+const handleSubmit = async (event) => { // <<< THÊM ASYNC
   event.preventDefault();
   setLoading(true);
   setError(null);
-  console.log("[LoginPage] Form submitted with email:", email); // Log email submit
+  console.log("[LoginPage] Form submitted with email:", email);
 
-  const loggedInUser = login(email, password); // Gọi login
-  console.log("[LoginPage] login function returned:", loggedInUser); // Log kết quả login trả về
+  try {
+    // Gọi hàm login từ context (đã gọi API)
+    const loggedInUser = await login(email, password); // <<< DÙNG AWAIT
 
-  if (loggedInUser) {
-    console.log("[LoginPage] Login successful, user role:", loggedInUser.role);
-    if (loggedInUser.role === 'employer') {
-      console.log("[LoginPage] Navigating to /employer/dashboard"); // Log trước khi navigate
-      navigate('/employer/dashboard');
-    } else if (loggedInUser.role === 'candidate') {
-      console.log("[LoginPage] Navigating to /candidate/dashboard");
-      navigate('/candidate/dashboard');
+    if (loggedInUser) {
+      console.log("[LoginPage] Login successful via Context/API, user role:", loggedInUser.role);
+      // Điều hướng dựa trên vai trò hoặc về trang trước đó (from)
+       let targetPath = '/'; // Mặc định về trang chủ
+       if (from && from !== '/login' && from !== '/register') {
+          targetPath = from; // Ưu tiên về trang yêu cầu redirect
+       } else if (loggedInUser.role === 'employer') {
+          targetPath = '/employer/dashboard';
+       } else if (loggedInUser.role === 'candidate') {
+          targetPath = '/candidate/dashboard';
+       }
+       console.log("[LoginPage] Navigating to:", targetPath);
+       navigate(targetPath, { replace: true }); // replace: true để không quay lại trang login bằng nút back
+
     } else {
-       console.log("[LoginPage] Navigating to / (default)");
-      navigate('/');
+      // Trường hợp này ít xảy ra nếu API lỗi thì đã throw error
+      setError("Đã có lỗi xảy ra trong quá trình đăng nhập.");
+      setLoading(false);
     }
-  } else {
-    console.log("[LoginPage] Login failed"); // Log khi thất bại
-    setError("Email hoặc mật khẩu không đúng.");
+  } catch (err) {
+    console.error("[LoginPage] Login failed:", err);
+    // Hiển thị lỗi trả về từ API (nếu có) hoặc lỗi chung
+    setError(err.response?.data?.message || err.message || "Email hoặc mật khẩu không đúng.");
     setLoading(false);
   }
 };

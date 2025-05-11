@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import apiService from '../../services/api';
 
 // Import MUI components
 import Box from '@mui/material/Box';
@@ -37,11 +38,13 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import LinkIcon from '@mui/icons-material/Link';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CancelScheduleSendIcon from '@mui/icons-material/CancelScheduleSend'; // Icon hủy ứng tuyển
 import ListItemIcon from '@mui/material/ListItemIcon'; // Import ListItemIcon
 import DescriptionIcon from '@mui/icons-material/Description'; // Icon Ghi chú (có thể dùng cho mô tả kinh nghiệm)
+import UploadFileIcon from '@mui/icons-material/UploadFile'; // Icon Upload CV
 
 function CandidateProfilePage() {
-  const { authState, updateUserProfile } = useAuth();
+  const { setAuthState, authState, updateUserProfile } = useAuth();
   const currentUser = authState.user;
 
   // State Edit Personal Info
@@ -342,31 +345,68 @@ const uploadCVToServerMock = async (candidateId, file) => {
   }
 
   const handleUploadCV = async () => {
-    if (!selectedFile || !currentUser?.id) return;
+    console.log(">>> Khi bấm Tải lên, selectedFile là:", selectedFile);
+    console.log("handleUploadCV called. selectedFile:", selectedFile, "currentUser ID:", currentUser?.id); // Log kiểm tra
+
+    if (!selectedFile || !currentUser?.id) {
+        console.log("handleUploadCV: Aborted - No file selected or no user ID.");
+        setSnackbar({ open: true, message: 'Vui lòng chọn file CV trước khi tải lên.', severity: 'warning' });
+        return;
+    }
 
     setIsUploadingCV(true);
     setSnackbar({ ...snackbar, open: false });
+    console.log("handleUploadCV: Set loading true. Uploading file:", selectedFile.name);
+
+    // Tạo đối tượng FormData để gửi file
+    const formData = new FormData();
+    // Key 'cvFile' phải khớp với tên field mà multer mong đợi ở backend: upload.single('cvFile')
+    formData.append('cvFile', selectedFile);
+    console.log("handleUploadCV: FormData created.");
 
     try {
-      const result = await uploadCVToServerMock(currentUser.id, selectedFile);
-      if (result.success && result.newCvData) {
-        // Cập nhật danh sách CV trong state (sau này nên gọi API để cập nhật context/refetch)
-        const updatedCVs = [...(currentUser.uploadedCVs || []), result.newCvData];
-        // Gọi hàm updateUserProfile giả lập để cập nhật context (nếu muốn)
-        await updateUserProfile({ uploadedCVs: updatedCVs });
+        console.log("handleUploadCV: Calling apiService.uploadCvApi...");
+        // --- GỌI API THẬT SỰ ---
+        const response = await apiService.uploadCvApi(formData);
+        console.log("handleUploadCV: API response received:", response?.data);
 
-        setSnackbar({ open: true, message: result.message, severity: 'success' });
-        setSelectedFile(null); // Xóa file đã chọn sau khi upload thành công
-        const fileInput = document.getElementById('cvUploadInput');
-        if(fileInput) fileInput.value = null; // Reset input
-      } else {
-        setSnackbar({ open: true, message: result.message || 'Upload CV thất bại.', severity: 'error' });
-      }
+        if (response.data && response.data.newCv) {
+            const newCvData = response.data.newCv;
+            console.log("handleUploadCV: Upload Success. New CV data:", newCvData);
+
+            // --- Cập nhật AuthContext và localStorage ---
+             setAuthState((prevState) => {
+                // Đảm bảo prevState.user và uploadedCVs tồn tại và là mảng
+                const existingCVs = Array.isArray(prevState.user?.uploadedCVs) ? prevState.user.uploadedCVs : [];
+                // Thêm CV mới vào đầu danh sách
+                const updatedCVs = [newCvData, ...existingCVs];
+                // Tạo user state mới với danh sách CV đã cập nhật
+                const updatedUser = { ...prevState.user, uploadedCVs: updatedCVs };
+                // Cập nhật localStorage
+                localStorage.setItem('authUser', JSON.stringify(updatedUser));
+                // Trả về state mới cho AuthContext
+                return { ...prevState, user: updatedUser };
+            });
+             // --- Kết thúc cập nhật ---
+
+            setSnackbar({ open: true, message: response.data.message || "Tải lên CV thành công!", severity: 'success' });
+            setSelectedFile(null); // Xóa file đã chọn khỏi state
+            // Reset input file để có thể chọn lại cùng file
+             const fileInput = document.getElementById('cvUploadInput');
+             if(fileInput) fileInput.value = null;
+
+        } else {
+            // Trường hợp API trả về 2xx nhưng không có dữ liệu mong muốn
+             console.error("handleUploadCV: Upload failed - Invalid response format.", response?.data);
+             throw new Error(response.data?.message || 'Upload CV thất bại. Dữ liệu trả về không hợp lệ.');
+        }
     } catch (err) {
-      console.error("Lỗi upload CV:", err);
-      setSnackbar({ open: true, message: err.message || 'Không thể tải lên CV.', severity: 'error' });
+        console.error("handleUploadCV: API Call Error caught:", err);
+        const errorMsg = err.response?.data?.message || err.message || 'Không thể tải lên CV.';
+        setSnackbar({ open: true, message: errorMsg, severity: 'error' });
     } finally {
-      setIsUploadingCV(false);
+        console.log("handleUploadCV: Setting loading false.");
+        setIsUploadingCV(false);
     }
   };
   // === KẾT THÚC HANDLERS MỚI ===
