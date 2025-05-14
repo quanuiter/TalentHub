@@ -18,7 +18,7 @@ router.get(
     authorize('employer'), // Cần là employer
     jobController.getEmployerJobs // Hàm controller đúng
 );
-
+router.get('/company/:companyId', jobController.getJobsByCompany);
 // GET /api/jobs/:id - Lấy chi tiết một Job (công khai)
 // Route này phải đặt sau /my-jobs để tránh xung đột
 router.get('/:id', jobController.getJobById);

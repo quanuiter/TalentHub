@@ -20,6 +20,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import LinkIcon from '@mui/icons-material/Link';
+import CakeIcon from '@mui/icons-material/Cake'; // Ngày sinh
 import SchoolIcon from '@mui/icons-material/School'; // Học vấn
 import WorkIcon from '@mui/icons-material/Work';   // Kinh nghiệm
 
@@ -46,9 +47,11 @@ function ViewProfileDialog({ open, onClose, candidateData, loading }) {
                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><EmailIcon color="action" fontSize="small"/> <Typography variant="body2">{candidateData.email}</Typography></Box>
                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><PhoneIcon color="action" fontSize="small"/> <Typography variant="body2">{candidateData.phone || 'Chưa cập nhật'}</Typography></Box>
                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><LocationOnIcon color="action" fontSize="small"/> <Typography variant="body2">{candidateData.address || 'Chưa cập nhật'}</Typography></Box>
+                 {candidateData.dateOfBirth && <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><CakeIcon  color="action" fontSize="small"/> {new Date(candidateData.dateOfBirth).toLocaleDateString('vi-VN')}</Box>}
                  {candidateData.linkedin && <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><LinkedInIcon color="action" fontSize="small"/> <Link href={candidateData.linkedin} target="_blank" rel="noopener noreferrer" variant="body2">{candidateData.linkedin}</Link></Box>}
                  {candidateData.portfolio && <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: '250px' }}><LinkIcon color="action" fontSize="small"/> <Link href={candidateData.portfolio} target="_blank" rel="noopener noreferrer" variant="body2">{candidateData.portfolio}</Link></Box>}
-              
+                 
+                  
             </Box>
             <Divider />
             {/* Giới thiệu */}

@@ -36,26 +36,45 @@ const applicationSchema = new mongoose.Schema({
         trim: true
     },
     status: {
-        type: String,
-        required: true,
-        enum: [
-            'Đã nộp',       // Candidate submitted
-            'Đã xem',       // Employer viewed
-            'Phù hợp',      // Employer marked as suitable initial screen
-            'Không phù hợp',// Employer marked as unsuitable initial screen
-            'Mời làm bài test', // Invited for test
-            'Đã gửi bài test', // Test sent (confirmed state maybe)
-            'Mời phỏng vấn', // Invited for interview
-            'Đã xác nhận PV/Test', // Candidate confirmed schedule
-            'Đã từ chối PV/Test', // Candidate declined schedule
-            'Trúng tuyển',    // Offer extended
-            'Từ chối',      // Candidate rejected / Offer declined by candidate
-            'Đã hủy',       // Application cancelled by employer/candidate
-            // Thêm các trạng thái khác nếu cần
-        ],
-        default: 'Đã nộp'
+    type: String,
+    required: true,
+    enum: [
+        'Đã nộp',        // Candidate submitted
+        'Đã xem',        // Employer viewed
+        'Phù hợp',       // Employer marked as suitable
+        'Mời phỏng vấn',  // Invited for interview
+        'Trúng tuyển',     // Offer extended
+        'Từ chối',       // Rejected by employer or candidate declined offer
+        // Bỏ bớt các trạng thái trung gian nếu không quá cần thiết cho giai đoạn này
+    ],
+    default: 'Đã nộp'
+},
+    interviewDetails: {
+        interviewDate: { type: Date },
+        interviewTime: { type: String }, // Lưu dưới dạng HH:mm
+        interviewType: { type: String }, // Ví dụ: "Vòng 1 - HR", "Technical Interview"
+        location: { type: String }, // Địa điểm cụ thể hoặc "Online"
+        link: { type: String }, // Link cho phỏng vấn online (Google Meet, Zoom, etc.)
+        notes: { type: String, trim: true } // Ghi chú thêm từ nhà tuyển dụng
     },
-    // Có thể thêm các trường về lịch sử thay đổi status, notes của employer,... sau
+    evaluation: {
+        rating: { // Điểm từ 1-5 sao
+            type: Number,
+            min: 1,
+            max: 5
+        },
+        notes: { // Ghi chú của NTD
+            type: String,
+            trim: true
+        },
+        evaluatedBy: { // NTD nào đánh giá
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        evaluationDate: { // Ngày đánh giá
+            type: Date
+        }
+    },// Có thể thêm các trường về lịch sử thay đổi status, notes của employer,... sau
     // employerNotes: [{ note: String, date: Date, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User'} }],
 
 }, {

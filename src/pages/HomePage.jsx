@@ -23,8 +23,7 @@ import InputAdornment from "@mui/material/InputAdornment"
 
 import JobCard from "../components/jobs/JobCard"
 import CompanyCard from "../components/companies/companyCard"
-import { fetchJobs } from "../data/mockJobs"
-import { fetchCompanies } from "../data/mockCompanies"
+import apiService from "../services/api"; 
 import LoadingSpinner from "../components/ui/LoadingSpinner"
 
 // Dữ liệu giả lập cho bộ lọc nhanh
@@ -39,6 +38,8 @@ const popularLocations = ["TP. Hồ Chí Minh", "Hà Nội", "Đà Nẵng", "Rem
 
 function HomePage() {
   const navigate = useNavigate()
+  const [errorCompanies, setErrorCompanies] = useState(null);
+  const [errorJobs, setErrorJobs] = useState(null);
   const [featuredJobs, setFeaturedJobs] = useState([])
   const [featuredCompanies, setFeaturedCompanies] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(true)
@@ -51,23 +52,51 @@ function HomePage() {
   // Load jobs và companies
   useEffect(() => {
     const loadData = async () => {
-      setLoadingJobs(true)
-      setLoadingCompanies(true)
+      setLoadingJobs(true);
+      setLoadingCompanies(true);
+      setErrorJobs(null);
+      setErrorCompanies(null);
+
       try {
-        const [jobsData, companiesData] = await Promise.all([fetchJobs(), fetchCompanies()])
-        // Lấy 6 job mới nhất (hoặc nổi bật)
-        setFeaturedJobs(jobsData.slice(0, 6))
-        // Lấy 6 công ty nổi bật
-        setFeaturedCompanies(companiesData.slice(0, 6))
+        // Gọi API để lấy jobs
+        const jobsResponse = await apiService.getPublicJobs(); // Giả sử lấy 6 job mới nhất ở backend hoặc lọc ở đây
+        if (jobsResponse && Array.isArray(jobsResponse.data)) {
+          // Sắp xếp theo createdAt (ngày tạo) mới nhất nếu backend chưa làm
+          // Và lấy 6 jobs đầu tiên
+          const sortedJobs = jobsResponse.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          setFeaturedJobs(sortedJobs.slice(0, 4));
+        } else {
+          setFeaturedJobs([]);
+          setErrorJobs("Không thể tải danh sách việc làm nổi bật.");
+        }
       } catch (error) {
-        console.error("Lỗi tải dữ liệu trang chủ:", error)
+        console.error("Lỗi tải jobs trang chủ:", error);
+        setErrorJobs(error.response?.data?.message || error.message || "Lỗi tải việc làm.");
+        setFeaturedJobs([]);
       } finally {
-        setLoadingJobs(false)
-        setLoadingCompanies(false)
+        setLoadingJobs(false);
       }
-    }
-    loadData()
-  }, [])
+
+      try {
+        // Gọi API để lấy companies
+        const companiesResponse = await apiService.getPublicCompaniesApi(); // Giả sử lấy 6 công ty hoặc lọc ở đây
+        if (companiesResponse && Array.isArray(companiesResponse.data)) {
+          // Lấy 6 công ty đầu tiên (backend có thể đã sắp xếp theo tiêu chí nổi bật)
+          setFeaturedCompanies(companiesResponse.data.slice(0, 4));
+        } else {
+          setFeaturedCompanies([]);
+          setErrorCompanies("Không thể tải danh sách công ty nổi bật.");
+        }
+      } catch (error) {
+        console.error("Lỗi tải companies trang chủ:", error);
+        setErrorCompanies(error.response?.data?.message || error.message || "Lỗi tải công ty.");
+        setFeaturedCompanies([]);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+    loadData();
+  }, []);
 
   // Xử lý tìm kiếm
   const handleSearch = (event) => {
@@ -365,7 +394,7 @@ function HomePage() {
             <Grid container spacing={3}>
               {featuredJobs.length > 0 ? (
                 featuredJobs.map((job) => (
-                  <Grid item xs={12} sm={6} md={4} key={job.id}>
+                  <Grid item xs={12} sm={6} md={4} key={job.id || job._id}>
                     <JobCard job={job} />
                   </Grid>
                 ))
@@ -527,7 +556,7 @@ function HomePage() {
                     xs={6}
                     sm={4}
                     md={2}
-                    key={company.id}
+                    key={company.id || company._id}
                     sx={{
                       display: "flex",
                       justifyContent: "center",

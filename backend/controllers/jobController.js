@@ -103,20 +103,41 @@ exports.createJob = async (req, res) => {
 
 // --- Lấy danh sách Jobs của Employer đang đăng nhập ---
 exports.getEmployerJobs = async (req, res) => {
-    // ... (code hàm này giữ nguyên như trước) ...
-     console.log('--- Reached getEmployerJobs Controller ---');
+    console.log('--- [BACKEND] Reached getEmployerJobs Controller ---');
     try {
         const employerId = req.user.userId;
-        console.log('Fetching jobs for Employer ID:', employerId);
-
         if (!employerId) {
             return res.status(401).json({ message: 'Không thể xác định nhà tuyển dụng.' });
         }
-        const jobs = await Job.find({ postedBy: employerId }).sort({ createdAt: -1 });
-        console.log(`Found ${jobs.length} jobs for employer.`);
-        res.status(200).json(jobs);
+
+        const jobsWithApplicantCount = await Job.aggregate([
+            { $match: { postedBy: new mongoose.Types.ObjectId(employerId) } }, // Lọc job của employer
+            {
+                $lookup: { // Join với collection 'applications'
+                    from: 'applications', // Tên collection applications trong DB
+                    localField: '_id',    // Khóa của Job model
+                    foreignField: 'jobId',// Khóa của Application model
+                    as: 'jobApplicants'   // Tên mảng kết quả join
+                }
+            },
+            {
+                $addFields: { // Thêm trường applicantCount
+                    applicantCount: { $size: '$jobApplicants' }
+                }
+            },
+            {
+                $project: { // Loại bỏ mảng jobApplicants không cần thiết trả về client
+                    jobApplicants: 0
+                }
+            },
+            { $sort: { createdAt: -1 } } // Sắp xếp
+        ]);
+
+        console.log(`[BACKEND] Found ${jobsWithApplicantCount.length} jobs with applicant counts for employer.`);
+        res.status(200).json(jobsWithApplicantCount);
+
     } catch (error) {
-        console.error("Error in getEmployerJobs:", error);
+        console.error("[BACKEND] Error in getEmployerJobs:", error);
         res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách công việc của bạn.' });
     }
 };
@@ -208,5 +229,28 @@ exports.deleteJob = async (req, res) => {
     } catch (error) {
         console.error("Delete Job Error:", error);
         res.status(500).json({ message: 'Lỗi máy chủ khi xóa tin tuyển dụng.' });
+    }
+};
+exports.getJobsByCompany = async (req, res) => {
+    try {
+        const companyId = req.params.companyId;
+
+        if (!mongoose.Types.ObjectId.isValid(companyId)) {
+            return res.status(400).json({ message: 'Company ID không hợp lệ.' });
+        }
+
+        // Tìm các jobs thuộc companyId này và có status là 'Active'
+        // Đồng thời populate tên công ty để hiển thị (mặc dù đã biết companyId)
+        const jobs = await Job.find({ companyId: companyId, status: 'Active' })
+            .sort({ createdAt: -1 }); // Sắp xếp job mới nhất lên đầu
+
+        if (!jobs) { // jobs sẽ là mảng rỗng nếu không tìm thấy, không phải null
+            return res.status(200).json([]); // Trả về mảng rỗng nếu không có job
+        }
+
+        res.status(200).json(jobs);
+    } catch (error) {
+        console.error("Get Jobs By Company Error:", error);
+        res.status(500).json({ message: 'Lỗi máy chủ khi lấy danh sách công việc của công ty.' });
     }
 };

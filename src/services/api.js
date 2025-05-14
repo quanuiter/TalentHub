@@ -36,7 +36,7 @@ apiClient.interceptors.request.use(
 export const registerApi = (userData) => apiClient.post('/auth/register', userData);
 export const loginApi = (credentials) => apiClient.post('/auth/login', credentials);
 // export const getMeApi = () => apiClient.get('/auth/me'); // Ví dụ API lấy thông tin user hiện tại
-
+export const getJobsByCompanyApi = (companyId) => apiClient.get(`/jobs/company/${companyId}`);
 // === Job APIs ===
 export const getEmployerJobsApi = () => apiClient.get('/jobs/my-jobs');
 export const getPublicJobs = (params = {}) => apiClient.get('/jobs', { params }); // params để lọc/phân trang sau này
@@ -47,7 +47,7 @@ export const createJobApi = (jobData) => apiClient.post('/jobs', jobData);
 export const updateJobApi = (jobId, jobData) => apiClient.put(`/jobs/${jobId}`, jobData);
 // Xóa job (yêu cầu token)
 export const deleteJobApi = (jobId) => apiClient.delete(`/jobs/${jobId}`);
-
+export const evaluateApplicationApi = (appId, evaluationData) => apiClient.put(`/applications/${appId}/evaluate`, evaluationData);
 // === Application APIs ===
 export const createApplicationApi = (applicationData) => apiClient.post('/applications', applicationData);
 export const getApplicantsForJobApi = (jobId) => apiClient.get(`/jobs/${jobId}/applicants`);
@@ -60,6 +60,12 @@ export const updateProfileApi = (profileData) => apiClient.put('/users/profile',
 export const uploadCvApi = (formData) => { // Có thể là export const hoặc chỉ const tùy cách bạn làm
     return apiClient.post('/users/profile/cv', formData);
 };
+
+export const getPublicCompaniesApi = (params = {}) => apiClient.get('/companies', { params }); // <<< THÊM HÀM NÀY
+export const getCompanyDetailsApi = (companyId) => apiClient.get(`/companies/${companyId}`);
+export const getMyCompanyProfileApi = () => apiClient.get('/companies/my-profile');
+export const updateMyCompanyProfileApi = (profileData) => apiClient.put('/companies/my-profile', profileData);
+export const getAllApplicantsForEmployerApi = () => apiClient.get('/applications/employer/all');
 // === Candidate APIs (Ví dụ) ===
 // export const applyJobApi = (applicationData) => apiClient.post('/apply', applicationData);
 // export const getAppliedJobsApi = () => apiClient.get('/candidate/applications');
@@ -67,7 +73,14 @@ export const uploadCvApi = (formData) => { // Có thể là export const hoặc 
 // === Company APIs (Ví dụ) ===
 // export const getPublicCompanies = (params = {}) => apiClient.get('/companies', { params });
 // export const getCompanyDetailsApi = (companyId) => apiClient.get(`/companies/${companyId}`);
-
+// === Test APIs (Thêm vào) ===
+export const getMyTestsApi = () => apiClient.get('/tests/my-tests');
+export const createTestApi = (testData) => apiClient.post('/tests', testData);
+export const updateTestApi = (testId, testData) => apiClient.put(`/tests/${testId}`, testData);
+export const deleteTestApi = (testId) => apiClient.delete(`/tests/${testId}`);
+export const scheduleInterviewApi = (appId, scheduleData) => {
+    return apiClient.put(`/applications/${appId}/schedule-interview`, scheduleData);
+};
 
 // Export apiClient nếu muốn dùng trực tiếp ở nơi khác (ít khuyến khích hơn dùng hàm cụ thể)
 // export default apiClient;
@@ -89,5 +102,17 @@ export default {
     getProfileApi,
     updateProfileApi,
     uploadCvApi,
+    evaluateApplicationApi,
+    getPublicCompaniesApi,
+    getCompanyDetailsApi,
+    getJobsByCompanyApi,
+    getMyCompanyProfileApi,
+    updateMyCompanyProfileApi,
+    getAllApplicantsForEmployerApi,
+    getMyTestsApi,
+    createTestApi,
+    updateTestApi,
+    deleteTestApi,
+    scheduleInterviewApi,
     //... thêm các hàm khác
 };

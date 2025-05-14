@@ -221,7 +221,7 @@ function JobDetailPage() {
           open={openApplyDialog}
           onClose={handleCloseApplyDialog}
           jobTitle={job.title}
-          jobId={job.id}
+          jobId={job.id||job._id}
        />
     )}
 

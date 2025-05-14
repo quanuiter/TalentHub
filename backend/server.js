@@ -8,7 +8,7 @@ const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const jobRoutes = require('./routes/jobRoutes'); // Giữ lại cho public jobs
 const applicationRoutes = require('./routes/applicationRoutes');
-const userRoutes = require('./routes/userRoutes'); // <<< THÊM DÒNG NÀY
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -29,6 +29,8 @@ app.use((req, res, next) => {
 // Khi frontend yêu cầu /uploads/cvs/ten_file.pdf, express sẽ tìm file trong thư mục backend/uploads/cvs
 app.use('/uploads/cvs', express.static(path.join(__dirname, 'uploads', 'cvs')));
 console.log(`Serving static files from: ${path.join(__dirname, 'uploads', 'cvs')}`);
+const companyRoutes = require('./routes/companyRoutes');
+const testRoutes = require('./routes/testRoutes');
 // --- THÊM MIDDLEWARE XỬ LÝ LỖI TOÀN CỤC ---
 app.use((err, req, res, next) => {
   console.error("--- MIDDLEWARE XỬ LÝ LỖI BẮT ĐƯỢC ---");
@@ -60,7 +62,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes); // Public job routes
 app.use('/api/applications', applicationRoutes); // Application routes
 app.use('/api/users', userRoutes); // <<< THÊM DÒNG NÀY (User profile routes)
-
+app.use('/api/companies', companyRoutes);
+app.use('/api/tests', testRoutes);
 // Kết nối MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB Connected Successfully!'))

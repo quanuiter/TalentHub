@@ -1,11 +1,13 @@
 // src/pages/employer/ManageTestsPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 // Đảm bảo đường dẫn này đúng và file data chứa đủ các hàm/biến này
-import { fetchEmployerTests, deleteEmployerTest, createEmployerTest, updateEmployerTest } from '../../data/mockJobs'; // Hoặc mockJobs.js?
+import apiService from '../../services/api';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import PropTypes from 'prop-types'; // <<< THÊM DÒNG NÀY
+import { format } from 'date-fns'; // <<< THÊM IMPORT NÀY
+import { vi } from 'date-fns/locale'; 
 // Import MUI components
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -27,7 +29,6 @@ import Stack from '@mui/material/Stack';
 import CircularProgress from '@mui/material/CircularProgress';
 import TextField from '@mui/material/TextField';
 import Link from '@mui/material/Link';
-
 // Import Icons
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -62,44 +63,38 @@ function ManageTestsPage() {
   const [deletingTestId, setDeletingTestId] = useState(null);
 
   // Hàm load danh sách tests
-  const loadTests = async () => {
+ const loadTests = useCallback(async () => {
     if (!authState.user?.id) {
-        setError("Không thể xác định nhà tuyển dụng."); // Set lỗi nếu không có user id
-        setLoading(false);
+        // Không set error ở đây nữa vì useEffect sẽ không chạy nếu user ID chưa có
         return;
-    };
+    }
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchEmployerTests(authState.user.id);
-       // Luôn đảm bảo setTests với một mảng
-      setTests(Array.isArray(data) ? data : []);
+      const response = await apiService.getMyTestsApi(); // Gọi API thật
+      console.log("API Response for My Tests:", response.data);
+      setTests(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error("Lỗi khi tải danh sách bài test:", err);
-      setError("Không thể tải danh sách bài test.");
-      setTests([]); // Set mảng rỗng khi lỗi
+      setError(err.response?.data?.message || "Không thể tải danh sách bài test.");
+      setTests([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [authState.user?.id]); // Phụ thuộc vào userId
 
-  // useEffect load tests khi tab 'list' active hoặc user thay đổi
   useEffect(() => {
-    if (activeTab === 'list') {
+    if (authState.isAuthenticated && authState.user?.id && activeTab === 'list') {
         loadTests();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, authState.user?.id]); // Bỏ qua cảnh báo ESLint nếu loadTests không thay đổi
+  }, [activeTab, authState.isAuthenticated, authState.user?.id, loadTests]);
 
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
-    // Reset form và lỗi khi chuyển tab
-    setFormData({ testId: null, name: '', link: '' });
+    setFormData({ testId: null, name: '', link: '', description: '', durationMinutes: '' }); // Reset form khi chuyển tab
     setFormError('');
-    if (newValue === 'list') { // Xóa lỗi fetch khi quay về tab list
-        setError('');
-    }
+    if (newValue === 'list') { setError(''); }
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -117,18 +112,18 @@ function ManageTestsPage() {
     setDeletingTestId(null);
   };
   const handleConfirmDelete = async () => {
-    if (!authState.user?.id || !deletingTestId || actionLoading.id) return;
+    if (!deletingTestId || actionLoading.id) return;
     const testIdToDelete = deletingTestId;
     handleCloseDeleteDialog();
     setActionLoading({type: 'delete', id: testIdToDelete});
     setSnackbar({ ...snackbar, open: false });
     try {
-        await deleteEmployerTest(authState.user.id, testIdToDelete);
-        setTests(prevTests => prevTests.filter(test => test.testId !== testIdToDelete));
+        await apiService.deleteTestApi(testIdToDelete); // Gọi API thật
+        setTests(prevTests => prevTests.filter(test => test._id !== testIdToDelete)); // Dùng _id từ MongoDB
         setSnackbar({ open: true, message: 'Đã xóa bài test thành công!', severity: 'success' });
     } catch(err) {
         console.error("Lỗi khi xóa test:", err);
-        setSnackbar({ open: true, message: `Lỗi! Không thể xóa bài test. (${err.message})`, severity: 'error' });
+        setSnackbar({ open: true, message: err.response?.data?.message || `Lỗi! Không thể xóa bài test.`, severity: 'error' });
     } finally {
          setActionLoading({type: null, id: null});
     }
@@ -142,7 +137,13 @@ function ManageTestsPage() {
   };
 
   const handleEditClick = (test) => {
-      setFormData({ testId: test.testId, name: test.name, link: test.link });
+      setFormData({
+          testId: test._id, // Dùng _id
+          name: test.name,
+          link: test.link,
+          description: test.description || '',
+          durationMinutes: test.durationMinutes || ''
+      });
       setFormError('');
       setActiveTab('create');
   };
@@ -153,37 +154,48 @@ function ManageTestsPage() {
       setActiveTab('create'); // Đảm bảo đang ở tab create
   };
 
-  const handleFormSubmit = async (event) => {
+const handleFormSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
     if (!formData.name || !formData.link) {
         setFormError('Vui lòng nhập Tên và Link bài test.');
         return;
     }
-     try { new URL(formData.link); } catch (_) { setFormError('Link bài test không hợp lệ.'); return; }
+    try { new URL(formData.link); } catch (_) { setFormError('Link bài test không hợp lệ.'); return; }
+    if (formData.durationMinutes !== '' && (isNaN(formData.durationMinutes) || Number(formData.durationMinutes) < 0)) {
+        setFormError('Thời gian làm bài không hợp lệ.'); return;
+    }
+
 
     setIsSubmitting(true);
     setSnackbar({ ...snackbar, open: false });
 
+    const dataToSubmit = {
+        name: formData.name,
+        link: formData.link,
+        description: formData.description || undefined, // Gửi undefined nếu rỗng
+        durationMinutes: formData.durationMinutes === '' ? undefined : Number(formData.durationMinutes)
+    };
+
     try {
         let message = '';
         if (formData.testId) { // Chế độ Sửa
-            await updateEmployerTest(authState.user.id, formData.testId, { name: formData.name, link: formData.link });
+            await apiService.updateTestApi(formData.testId, dataToSubmit); // Gọi API thật
             message = 'Cập nhật bài test thành công!';
         } else { // Chế độ Thêm
-            await createEmployerTest(authState.user.id, { name: formData.name, link: formData.link });
+            await apiService.createTestApi(dataToSubmit); // Gọi API thật
             message = 'Thêm bài test thành công!';
         }
         setSnackbar({ open: true, message: message, severity: 'success'});
-        loadTests(); // Tải lại danh sách sau khi thêm/sửa
-        setActiveTab('list'); // Chuyển về tab list sau khi thành công
-        setFormData({ testId: null, name: '', link: '' }); // Reset form
+        loadTests();
+        setActiveTab('list');
+        setFormData({ testId: null, name: '', link: '', description: '', durationMinutes: '' }); // Reset form
 
     } catch(err) {
          console.error("Lỗi khi lưu test:", err);
-         const errorMsg = `Lỗi! Không thể lưu bài test. (${err.message || 'Lỗi không xác định'})`;
+         const errorMsg = err.response?.data?.message || `Lỗi! Không thể lưu bài test.`;
          setSnackbar({ open: true, message: errorMsg, severity: 'error'});
-         setFormError(errorMsg);
+         setFormError(errorMsg); // Hiển thị lỗi này trực tiếp trên form
     } finally {
         setIsSubmitting(false);
     }
@@ -221,7 +233,7 @@ function ManageTestsPage() {
               <TableBody>
                 {Array.isArray(tests) && tests.length > 0 ? ( // Kiểm tra isArray cho chắc
                   tests.map((test) => (
-                    <TableRow key={test.testId} hover>
+                    <TableRow key={test._id} hover>
                       <TableCell component="th" scope="row">{test.name}</TableCell>
                       <TableCell sx={{maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
                         <Tooltip title={test.link || ''}>
@@ -232,12 +244,12 @@ function ManageTestsPage() {
                         </Tooltip>
                       </TableCell>
                       <TableCell>
-                        {test.dateCreated ? new Date(test.dateCreated).toLocaleDateString('vi-VN') : 'N/A'}
+                        {test.createdAt ? new Date(test.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
                           <Tooltip title="Sửa thông tin test">
-                            <IconButton size="small" onClick={() => handleEditClick(test)} disabled={actionLoading.id === test.testId}>
+                            <IconButton size="small" onClick={() => handleEditClick(test)} disabled={actionLoading.id === test._id}>
                               <EditIcon fontSize='small'/>
                             </IconButton>
                           </Tooltip>
@@ -246,10 +258,10 @@ function ManageTestsPage() {
                                 <IconButton
                                     size="small"
                                     color="error"
-                                    onClick={() => handleDeleteClick(test.testId)}
-                                    disabled={actionLoading.id === test.testId}
+                                    onClick={() => handleDeleteClick(test._id)}
+                                    disabled={actionLoading.id === test._id}
                                 >
-                                    {actionLoading.type === 'delete' && actionLoading.id === test.testId
+                                    {actionLoading.type === 'delete' && actionLoading.id === test._id
                                         ? <CircularProgress size={18} color="inherit"/>
                                         : <DeleteIcon fontSize='small'/>
                                     }

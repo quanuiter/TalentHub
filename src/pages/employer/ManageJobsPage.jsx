@@ -211,94 +211,91 @@ function ManageJobsPage() {
             </TableHead>
             <TableBody>
               {jobs.length > 0 ? (
-                jobs.map((job) => (
-                  <TableRow key={job._id} hover> {/* Thêm hover effect */}
-                    <TableCell component="th" scope="row">
-                      <Typography variant="subtitle2">{job.title}</Typography>
-                       {/* Có thể thêm link đến trang job gốc nếu cần */}
-                       {/* <Link component={RouterLink} to={`/jobs/${job.originalJobId || job._id}`} variant="caption">Xem tin gốc</Link> */}
-                    </TableCell>
-                    <TableCell>
-                      {job.createdAt ? new Date(job.createdAt).toLocaleDateString('vi-VN') : '-'}
-                      {job.applicationDeadline && (
-                        <Typography variant="caption" display="block">
+                jobs.map((job) => {
+                  // <<< KHAI BÁO currentJobId Ở ĐÂY CHO MỖI JOB >>>
+                  const currentJobId = job._id || job.id;
+                  const isActionLoading = actionLoading.id === currentJobId;
+
+                  return (
+                    <TableRow key={currentJobId} hover>
+                      <TableCell component="th" scope="row">
+                        <Typography variant="subtitle2">{job.title}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        {job.createdAt ? new Date(job.createdAt).toLocaleDateString('vi-VN') : '-'}
+                        {job.applicationDeadline && (
+                          <Typography variant="caption" display="block">
                             Hạn: {new Date(job.applicationDeadline).toLocaleDateString('vi-VN')}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip
-                        label={job.status || 'N/A'}
-                        color={getJobStatusColor(job.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                         {/* Link đến trang xem ứng viên */}
-                        <Link component={RouterLink} to={`#`} /* to={`/employer/manage-jobs/${job._id}/applicants`} */ underline="hover">
-                            {job.applicantCount ?? 0}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={job.status || 'N/A'}
+                          color={getJobStatusColor(job.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Link component={RouterLink} to={`/employer/jobs/${currentJobId}/applicants`} underline="hover">
+                          {job.applicantCount ?? 0}
                         </Link>
-                    </TableCell>
-                    <TableCell align="center">
-                        {/* Stack để các icon/button gần nhau hơn */}
+                      </TableCell>
+                      <TableCell align="center">
                         <Stack direction="row" spacing={0.5} justifyContent="center">
-                            <Tooltip title="Sửa tin">
+                          <Tooltip title="Sửa tin">
+                            <span>
                               <IconButton
                                 size="small"
-                                disabled={actionLoading.id === job._id}
-                                component={RouterLink} // <<< Dùng RouterLink
-                                to={`/employer/edit-job/${job._id}`} // <<< Trỏ đến route edit
+                                component={RouterLink}
+                                to={`/employer/edit-job/${currentJobId}`} // Sử dụng currentJobId
+                                disabled={isActionLoading}
                               >
                                 <EditIcon fontSize='small'/>
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Xem ứng viên">
-                            <IconButton
-                                        size="small"
-                                        // Bỏ onClick nếu có
-                                        // onClick={() => handleViewApplicants(job._id)}
-                                        disabled={actionLoading.id === job._id}
-                                        component={RouterLink} // <<< Thêm component RouterLink
-                                        to={`/employer/jobs/${job._id}/applicants`} // <<< Trỏ đến route mới với job._id
-                                    >
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Xem ứng viên">
+                           <span>
+                              <IconButton
+                                size="small"
+                                component={RouterLink}
+                                to={`/employer/jobs/${currentJobId}/applicants`} // Sử dụng currentJobId
+                                disabled={isActionLoading}
+                              >
                                 <VisibilityIcon fontSize='small'/>
+                              </IconButton>
+                           </span>
+                          </Tooltip>
+                          <Tooltip title={job.status === 'Active' ? 'Đóng tin' : 'Mở lại tin'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleToggleStatus(currentJobId, job.status)} // Sử dụng currentJobId
+                                disabled={isActionLoading || job.status === 'Draft'}
+                                color={job.status === 'Active' ? 'warning' : 'success'}
+                              >
+                                {actionLoading.type === 'toggle' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : (job.status === 'Active' ? <ToggleOffIcon fontSize='small'/> : <ToggleOnIcon fontSize='small'/>)}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                           <Tooltip title="Xóa tin">
+                               <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => handleDeleteClick(currentJobId)} // Sử dụng currentJobId
+                                  disabled={isActionLoading}
+                                >
+                                   {actionLoading.type === 'delete' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : <DeleteIcon fontSize='small'/>}
                                 </IconButton>
-                            </Tooltip>
-                            {/* Nút Đóng/Mở tin */}
-                            <Tooltip title={job.status === 'Active' ? 'Đóng tin' : 'Mở lại tin'}>
-                                <span> {/* Thêm span để Tooltip hoạt động khi disabled */}
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => handleToggleStatus(job._id, job.status)}
-                                        disabled={actionLoading.id === job._id || job.status === 'Draft'} // Không toggle tin Nháp
-                                        color={job.status === 'Active' ? 'warning' : 'success'}
-                                    >
-                                        {actionLoading.type === 'toggle' && actionLoading.id === job._id
-                                            ? <CircularProgress size={18} color="inherit"/>
-                                            : (job.status === 'Active' ? <ToggleOffIcon fontSize='small'/> : <ToggleOnIcon fontSize='small'/>)
-                                        }
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                             <Tooltip title="Xóa tin">
-                                 <span>
-                                    <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={() => handleDeleteClick(job._id)}
-                                        disabled={actionLoading.id === job._id}
-                                    >
-                                         {actionLoading.type === 'delete' && actionLoading.id === job._id
-                                            ? <CircularProgress size={18} color="inherit"/>
-                                            : <DeleteIcon fontSize='small'/>
-                                        }
-                                    </IconButton>
-                                 </span>
-                            </Tooltip>
+                               </span>
+                          </Tooltip>
                         </Stack>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} align="center">
