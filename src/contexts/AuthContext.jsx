@@ -1,8 +1,9 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import apiService from '../services/api'; // <<< Import apiService
-import LoadingSpinner from "../components/ui/LoadingSpinner"
-import { useNavigate } from 'react-router-dom'; // Có thể cần nếu muốn logout điều hướng
+import apiService from '../services/api';
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useCallback } from 'react'; // Thêm import useCallback nếu chưa có
+// import { useNavigate } from 'react-router-dom'; // Bỏ nếu không dùng trực tiếp
 
 const AuthContext = createContext(null);
 
@@ -10,164 +11,197 @@ export const AuthProvider = ({ children }) => {
   const [authState, setAuthState] = useState({
     isAuthenticated: false,
     user: null,
-    isLoading: true, // Thêm state loading ban đầu để kiểm tra token
+    isLoading: true,
   });
-  // Không cần navigate trong context, các component sẽ tự navigate
-  // const navigate = useNavigate();
 
-  // --- useEffect: Kiểm tra token khi ứng dụng tải lần đầu ---
-  // (Phần này tùy chọn, giúp tự động đăng nhập nếu token còn hạn)
   useEffect(() => {
     const checkAuthStatus = async () => {
       const token = localStorage.getItem('authToken');
+      console.log("[AuthContext RELOAD] Token from localStorage:", token);
       if (token) {
-        console.log("[AuthContext] Found token. Verifying with API...");
+        console.log("[AuthContext RELOAD] Found token. Verifying with API...");
         try {
-          // Gọi API /users/profile để xác thực token và lấy user data mới nhất
           const response = await apiService.getProfileApi();
+          console.log("[AuthContext RELOAD] Profile API Response:", response);
           if (response.data) {
-            console.log("[AuthContext] Token verified via API. Restoring session.");
-            localStorage.setItem('authUser', JSON.stringify(response.data)); // Lưu profile mới nhất
-            setAuthState({
+            console.log("[AuthContext RELOAD] Token verified. User data from profile API:", JSON.stringify(response.data, null, 2));
+            localStorage.setItem('authUser', JSON.stringify(response.data));
+            const newState = {
               isAuthenticated: true,
               user: response.data,
               isLoading: false
-            });
+            };
+            setAuthState(newState);
+            console.log("[AuthContext RELOAD] AuthState SET with profile data:", JSON.stringify(newState, null, 2));
           } else {
-              // API trả về 200 nhưng không có data? -> Lỗi bất thường
-              throw new Error("Invalid profile data received from API");
+            // Nên throw error nếu response.data không tồn tại sau khi API thành công
+            console.error("[AuthContext RELOAD] Profile API response successful but data is missing.");
+            throw new Error("Invalid profile data received from API after reload (data missing)");
           }
         } catch (error) {
-          // Lỗi 401 (Unauthorized) hoặc lỗi khác -> Token không hợp lệ/hết hạn
-          console.error("[AuthContext] Token verification failed or expired:", error.response?.data?.message || error.message);
+          console.error("[AuthContext RELOAD] Token verification FAILED or expired:", error.response?.data?.message || error.message, error);
           localStorage.removeItem('authToken');
           localStorage.removeItem('authUser');
-          setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+          const errorState = { isAuthenticated: false, user: null, isLoading: false };
+          setAuthState(errorState);
+          console.log("[AuthContext RELOAD] AuthState SET to unauthenticated due to error:", JSON.stringify(errorState, null, 2));
         }
       } else {
-        console.log("[AuthContext] No token found.");
-        setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+        console.log("[AuthContext RELOAD] No token found. Setting unauthenticated state.");
+        const noTokenState = { isAuthenticated: false, user: null, isLoading: false };
+        setAuthState(noTokenState);
+        console.log("[AuthContext RELOAD] AuthState SET due to no token:", JSON.stringify(noTokenState, null, 2));
       }
     };
     checkAuthStatus();
-  }, []); // Chỉ chạy 1 lần khi component mount
+  }, []);
 
-  // --- Hàm Đăng nhập ---
   const login = async (email, password) => {
-    console.log("[AuthContext] Attempting login via API:", email);
+    console.log("[AuthContext] Attempting login via API for email:", email);
     try {
       const response = await apiService.loginApi({ email, password });
-      console.log("[AuthContext] Login API Response:", response);
+      console.log("[AuthContext] Login API Full Response:", response);
 
       if (response.data && response.data.token && response.data.user) {
-        const { token, user } = response.data;
+        const { token, user: userFromLoginApi } = response.data;
 
-        // Lưu token và user vào localStorage
+        // >>> LOGGING CHI TIẾT USER OBJECT TỪ API LOGIN <<<
+        console.log("[AuthContext] LOGIN - User object received from Login API:", JSON.stringify(userFromLoginApi, null, 2));
+        console.log(`[AuthContext] LOGIN - Checking userFromLoginApi._id: ${userFromLoginApi?._id}`);
+        console.log(`[AuthContext] LOGIN - Checking userFromLoginApi.id: ${userFromLoginApi?.id}`);
+        console.log(`[AuthContext] LOGIN - Checking userFromLoginApi.role: ${userFromLoginApi?.role}`);
+        if (userFromLoginApi?.role === 'employer') {
+          console.log(`[AuthContext] LOGIN - Checking userFromLoginApi.companyId: ${userFromLoginApi?.companyId}`);
+          console.log(`[AuthContext] LOGIN - Checking userFromLoginApi.companyName: ${userFromLoginApi?.companyName}`);
+        }
+
         localStorage.setItem('authToken', token);
-        localStorage.setItem('authUser', JSON.stringify(user)); // Lưu user data
+        localStorage.setItem('authUser', JSON.stringify(userFromLoginApi));
 
-        // Cập nhật state
-        setAuthState({ isAuthenticated: true, user: user, isLoading: false });
-        console.log("[AuthContext] Login successful. State updated.");
-        return user; // Trả về user data khi thành công
+        const newState = {
+          isAuthenticated: true,
+          user: userFromLoginApi,
+          isLoading: false
+        };
+        setAuthState(newState);
+        // >>> LOGGING CHI TIẾT AUTHSTATE SAU KHI SET <<<
+        console.log("[AuthContext] LOGIN - AuthState SET after login. User ID in state (newState.user._id):", newState.user?._id);
+        console.log("[AuthContext] LOGIN - AuthState SET after login. User ID in state (newState.user.id):", newState.user?.id);
+        console.log("[AuthContext] LOGIN - AuthState SET after login. User Role in state:", newState.user?.role);
+        console.log("[AuthContext] LOGIN - AuthState SET after login. isLoading:", newState.isLoading);
+        console.log("[AuthContext] LOGIN - AuthState SET after login. isAuthenticated:", newState.isAuthenticated);
+        console.log("[AuthContext] LOGIN - Full AuthState SET after login:", JSON.stringify(newState, null, 2));
+
+        return userFromLoginApi;
       } else {
-        // Trường hợp API trả về 2xx nhưng không có token/user (ít xảy ra)
         console.error("[AuthContext] Login API response missing token or user:", response.data);
-        throw new Error(response.data?.message || 'Dữ liệu đăng nhập không hợp lệ.');
+        throw new Error(response.data?.message || 'Dữ liệu đăng nhập không hợp lệ từ API.');
       }
     } catch (error) {
-      console.error("[AuthContext] Login API Error:", error.response?.data || error.message);
-      // Xóa token/user cũ nếu có lỗi đăng nhập
+      console.error("[AuthContext] Login API Error:", error.response?.data || error.message, error);
       localStorage.removeItem('authToken');
       localStorage.removeItem('authUser');
-      setAuthState({ isAuthenticated: false, user: null, isLoading: false });
-      // Ném lỗi ra ngoài để component LoginPage có thể bắt và hiển thị
+      // Không set isLoading: false ở đây nếu lỗi, để component con có thể dựa vào isLoading ban đầu
+      // setAuthState({ isAuthenticated: false, user: null, isLoading: false }); // Cân nhắc việc này
       throw error;
     }
   };
 
-   // --- Hàm Đăng ký ---
-   // Hàm này chỉ gọi API đăng ký, không tự động đăng nhập sau đó
   const register = async (userData) => {
      console.log("[AuthContext] Attempting registration via API:", userData.email);
     try {
         const response = await apiService.registerApi(userData);
          console.log("[AuthContext] Register API Response:", response);
-        // Đăng ký thành công thường trả về 201 và có thể có hoặc không có token/user tùy thiết kế backend
-        // Ở đây chỉ cần biết là thành công hay không
         if (response.status === 201 && response.data) {
              console.log("[AuthContext] Registration successful.");
-            // Không tự động đăng nhập, trả về response để RegisterPage xử lý (ví dụ: chuyển hướng đến login)
              return response.data;
         } else {
             console.error("[AuthContext] Register API response invalid:", response.data);
             throw new Error(response.data?.message || 'Dữ liệu đăng ký không hợp lệ.');
         }
     } catch(error) {
-         console.error("[AuthContext] Register API Error:", error.response?.data || error.message);
-         throw error; // Ném lỗi ra để RegisterPage xử lý
+         console.error("[AuthContext] Register API Error:", error.response?.data || error.message, error);
+         throw error;
     }
   };
 
-
-  // --- Hàm Đăng xuất ---
   const logout = () => {
     console.log("[AuthContext] Logging out.");
-    // Xóa token và user khỏi localStorage
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
-    // Reset auth state
     setAuthState({ isAuthenticated: false, user: null, isLoading: false });
-    // Điều hướng về trang chủ hoặc login (thường làm ở component Header hoặc nơi gọi logout)
-    // navigate('/'); // Bỏ navigate ở đây
   };
 
-  // Hàm cập nhật profile (giữ lại nếu bạn có API cập nhật profile)
   const updateUserProfile = async (updatedData) => {
-    // Không cần kiểm tra role ở đây vì endpoint backend dùng chung
-    console.log("Attempting to update profile via API:", updatedData);
+    console.log("[AuthContext] Attempting to update profile via API with data:", updatedData);
     try {
-      // Gọi API backend để cập nhật profile thật
       const response = await apiService.updateProfileApi(updatedData);
-
       if (response.data && response.data.user) {
         const updatedUserFromApi = response.data.user;
-        console.log("API update successful. User data from API:", updatedUserFromApi);
-
-        // Cập nhật state và localStorage với dữ liệu mới nhất từ API
+        console.log("[AuthContext] Profile update successful. User data from API:", JSON.stringify(updatedUserFromApi, null, 2));
         setAuthState((prevState) => {
-          // Giữ nguyên isAuthenticated và isLoading
           const newUserState = { ...prevState.user, ...updatedUserFromApi };
-          localStorage.setItem('authUser', JSON.stringify(newUserState)); // Cập nhật localStorage
+          localStorage.setItem('authUser', JSON.stringify(newUserState));
+          console.log("[AuthContext] AuthState updated after profile update. New user state:", JSON.stringify(newUserState, null, 2));
           return {
             ...prevState,
             user: newUserState,
           };
         });
-        return true; // Trả về true báo thành công cho component ProfilePage
+        return true;
       } else {
-        // Trường hợp API trả về thành công nhưng không có user data (ít xảy ra)
-        console.error("API update response missing user data:", response.data);
-        throw new Error(response.data?.message || 'Dữ liệu trả về không hợp lệ.');
+        console.error("[AuthContext] Profile update API response missing user data:", response.data);
+        throw new Error(response.data?.message || 'Dữ liệu trả về không hợp lệ sau khi cập nhật hồ sơ.');
       }
-
     } catch (error) {
-      console.error("Error updating profile via API:", error.response?.data || error.message);
-      // Ném lỗi ra để component ProfilePage có thể bắt và hiển thị
+      console.error("[AuthContext] Error updating profile via API:", error.response?.data || error.message, error);
       throw error;
     }
   };
+      // >>> HÀM MỚI ĐỂ LƯU/BỎ LƯU JOB <<<
+    const handleToggleSaveJob = useCallback(async (jobId) => {
+        if (!authState.isAuthenticated || authState.user?.role !== 'candidate') {
+            // Có thể hiển thị thông báo yêu cầu đăng nhập/chỉ candidate mới lưu được
+            console.warn("[AuthContext] User not authenticated or not a candidate to save job.");
+            throw new Error("Vui lòng đăng nhập với tư cách ứng viên để lưu công việc.");
+        }
+        try {
+            const response = await apiService.toggleSaveJobApi(jobId);
+            if (response.data && Array.isArray(response.data.savedJobs)) {
+                // Backend trả về danh sách savedJobs đã populate, chúng ta chỉ cần lấy ID
+                const updatedSavedJobIds = response.data.savedJobs.map(job => job._id);
+                setAuthState(prevState => {
+                    const updatedUser = {
+                        ...prevState.user,
+                        // Cập nhật savedJobs trong user object (chỉ ID) nếu backend không trả về user đầy đủ
+                        // Hoặc nếu getUserProfile được gọi lại thì không cần
+                    };
+                    // Nếu không muốn cập nhật user.savedJobs trực tiếp, chỉ cần cập nhật authState.savedJobs
+                    // localStorage.setItem('authUser', JSON.stringify(updatedUser)); // Cẩn thận nếu user object quá lớn
 
+                    return {
+                        ...prevState,
+                        // user: updatedUser, // Chỉ cập nhật nếu cần thiết
+                        savedJobs: updatedSavedJobIds,
+                    };
+                });
+                return { success: true, message: response.data.message, isSaved: updatedSavedJobIds.includes(jobId) };
+            } else {
+                throw new Error("Phản hồi từ server không hợp lệ.");
+            }
+        } catch (error) {
+            console.error("[AuthContext] Error toggling save job:", error);
+            throw error; // Ném lỗi ra để component gọi xử lý (ví dụ: hiển thị snackbar)
+        }
+    }, [authState.isAuthenticated, authState.user?.role, setAuthState]);
 
   return (
-    // Cung cấp state và các hàm mới cho các component con
-    <AuthContext.Provider value={{ authState, setAuthState, login, logout, register, updateUserProfile }}>
-      {!authState.isLoading ? children : <LoadingSpinner />} {/* Hiển thị children hoặc loading */}
+    <AuthContext.Provider value={{ authState, setAuthState, login, logout, register, updateUserProfile, handleToggleSaveJob }}>
+      {children}
     </AuthContext.Provider>
   );
 };
 
-// Hook tùy chỉnh để dễ dàng sử dụng AuthContext
 export const useAuth = () => {
   return useContext(AuthContext);
 };

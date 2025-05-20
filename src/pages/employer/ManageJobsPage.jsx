@@ -1,11 +1,9 @@
 // src/pages/employer/ManageJobsPage.jsx
-import React, { useState, useEffect } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react'; // Added useCallback
+import { Link as RouterLink, useNavigate } from 'react-router-dom'; // Added useNavigate
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
-// Import hàm fetch/action mới
-import { fetchEmployerJobs, toggleJobStatus, deleteEmployerJob } from '../../data/mockJobs'; // Giả sử bạn lưu vào file riêng
-import ConfirmDialog from '../../components/common/ConfirmDialog'; // Dùng lại ConfirmDialog
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 
 // Import MUI components
 import Box from '@mui/material/Box';
@@ -21,102 +19,96 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
-import Link from '@mui/material/Link'; // MUI Link
+import Link from '@mui/material/Link';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
-import Stack from '@mui/material/Stack'; // Dùng cho Actions
+import Stack from '@mui/material/Stack';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useTheme, alpha } from '@mui/material/styles'; // Added useTheme and alpha
 
 // Import Icons
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import VisibilityIcon from '@mui/icons-material/Visibility'; // Xem ứng viên
-import ToggleOnIcon from '@mui/icons-material/ToggleOn'; // Mở lại tin
-import ToggleOffIcon from '@mui/icons-material/ToggleOff'; // Đóng tin
-import AddIcon from '@mui/icons-material/Add';
-import CircularProgress from '@mui/material/CircularProgress';
+import EditIcon from '@mui/icons-material/EditOutlined'; // Using Outlined versions
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
+import ToggleOffOutlinedIcon from '@mui/icons-material/ToggleOffOutlined';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'; // Changed AddIcon
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay'; // Icon for no jobs
+
 // Helper lấy màu Chip cho trạng thái tin đăng
 const getJobStatusColor = (status) => {
-  switch (status?.toLowerCase()) {
+  const lowerStatus = status?.toLowerCase();
+  switch (lowerStatus) {
     case 'active': return 'success';
-    case 'closed':
-    case 'expired':
-        return 'default'; // Hoặc 'secondary'
-    case 'draft': return 'warning';
-    default: return 'info';
+    case 'closed': return 'warning'; // Changed to warning for better visibility
+    case 'expired': return 'default';
+    case 'draft': return 'info'; // Changed to info
+    default: return 'secondary';
   }
 };
 
+const formatDisplayDate = (isoDateString) => {
+    if (!isoDateString) return 'N/A';
+    try {
+        return new Date(isoDateString).toLocaleDateString('vi-VN', {
+            day: '2-digit', month: '2-digit', year: 'numeric'
+        });
+    } catch (e) {
+        return 'Ngày không hợp lệ';
+    }
+};
 
 function ManageJobsPage() {
   const { authState } = useAuth();
-  //const navigate = useNavigate();
+  const navigate = useNavigate(); // Initialize useNavigate
+  const theme = useTheme(); // Initialize useTheme
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [actionLoading, setActionLoading] = useState({ type: null, id: null }); // State loading cho từng hành động
+  const [actionLoading, setActionLoading] = useState({ type: null, id: null });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState(null);
 
-  const loadJobs = async () => {
-    // Bỏ log không cần thiết
-    // console.log('[ManageJobsPage] loadJobs called. User ID:', authState.user?.id);
-    // Không cần kiểm tra user ID nữa vì API sẽ kiểm tra token
+  const loadJobs = useCallback(async () => {
+    if (!authState.user?.id || !authState.isAuthenticated || authState.isLoading) {
+        setLoading(false); // Stop loading if auth is not ready
+        if (!authState.isAuthenticated && !authState.isLoading) {
+            setError("Vui lòng đăng nhập để quản lý tin đăng.");
+        }
+        return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // console.log('[ManageJobsPage] Calling getEmployerJobsApi...'); // Có thể giữ lại log nếu muốn debug
-      // Gọi API mới để lấy jobs của employer hiện tại
       const response = await apiService.getEmployerJobsApi();
-      // console.log('[ManageJobsPage] API success. Data received:', response.data);
-
       if (response && Array.isArray(response.data)) {
-           // Sắp xếp mới nhất lên đầu (ví dụ)
            response.data.sort((a, b) => new Date(b.createdAt || b.datePosted) - new Date(a.createdAt || a.datePosted));
            setJobs(response.data);
       } else {
-           console.error("Employer jobs API response is not an array:", response);
+           console.error("Employer jobs API response is not an array or data is missing:", response);
            setJobs([]);
-           setError("Dữ liệu tin đăng trả về không hợp lệ.");
+           setError("Dữ liệu tin đăng trả về không hợp lệ hoặc không có.");
       }
     } catch (err) {
       console.error("[ManageJobsPage] Error loading employer jobs:", err);
-      // Hiển thị lỗi từ API nếu có, nếu không hiển thị lỗi chung
       const errorMsg = err.response?.data?.message || err.message || "Không thể tải danh sách tin đăng.";
       setError(errorMsg);
-      setJobs([]); // Đảm bảo jobs rỗng khi lỗi
+      setJobs([]);
     } finally {
-      // console.log('[ManageJobsPage] Reached finally block. Setting loading to false.');
       setLoading(false);
     }
-  };
+  }, [authState.user?.id, authState.isAuthenticated, authState.isLoading]); // Added dependencies
 
   useEffect(() => {
     loadJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authState.user?.id]);
+  }, [loadJobs]); // useEffect now depends on the memoized loadJobs
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === 'clickaway') return;
     setSnackbar({ ...snackbar, open: false });
-  };
-
-  // --- Mock Handlers for Actions ---
-  const handleEditJob = (jobId) => {
-    console.log("Navigating to edit job with ID:", jobId); // Kiểm tra xem jobId có phải undefined không
-    if (jobId) { // Chỉ điều hướng nếu có jobId
-       navigate(`/employer/edit-job/${jobId}`);
-    } else {
-       console.error("Cannot navigate to edit page: Job ID is undefined!");
-       // Có thể hiển thị thông báo lỗi cho người dùng
-    }
-};
-
-  const handleViewApplicants = (jobId) => {
-    console.log("View applicants for job:", jobId);
-    // navigate(`/employer/manage-jobs/${jobId}/applicants`); // Điều hướng đến trang xem ứng viên
-    setSnackbar({ open: true, message: `Chức năng xem ứng viên cho ${jobId} sẽ được làm sau!`, severity: 'info' });
   };
 
   const handleToggleStatus = async (jobId, currentStatus) => {
@@ -125,15 +117,13 @@ function ManageJobsPage() {
     setActionLoading({type: 'toggle', id: jobId});
     setSnackbar({ ...snackbar, open: false });
     try {
-        // <<< GỌI API CẬP NHẬT (chỉ cập nhật status) >>>
-        // Dùng lại API update nhưng chỉ gửi trường status
         const response = await apiService.updateJobApi(jobId, { status: newStatus });
-
-         // Cập nhật UI
-         setJobs(prevJobs => prevJobs.map(job =>
-             (job._id || job._id) === jobId ? { ...job, status: newStatus } : job
-         ));
-         setSnackbar({ open: true, message: response.data?.message || `Đã ${newStatus === 'Active' ? 'mở lại' : 'đóng'} tin!`, severity: 'success' });
+        // Backend should return the updated job with populated fields if needed by other parts of UI
+        // For this page, we only need to update the status locally or refetch.
+        setJobs(prevJobs => prevJobs.map(job =>
+            (job._id || job.id) === jobId ? { ...job, status: newStatus } : job
+        ));
+        setSnackbar({ open: true, message: response.data?.message || `Đã ${newStatus === 'Active' ? 'mở lại' : 'đóng'} tin!`, severity: 'success' });
     } catch(err) {
          console.error("Lỗi khi đổi trạng thái:", err);
          const errorMsg = err.response?.data?.message || 'Lỗi! Không thể đổi trạng thái tin.';
@@ -141,7 +131,7 @@ function ManageJobsPage() {
     } finally {
         setActionLoading({type: null, id: null});
     }
-};
+  };
 
   const handleDeleteClick = (jobId) => {
       setDeletingJobId(jobId);
@@ -154,18 +144,14 @@ function ManageJobsPage() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!deletingJobId || actionLoading.id) return; // Thêm kiểm tra actionLoading.id
+    if (!deletingJobId || actionLoading.id) return;
     const jobIdToDelete = deletingJobId;
-    handleCloseDeleteDialog();
+    handleCloseDeleteDialog(); // Close dialog first
     setActionLoading({type: 'delete', id: jobIdToDelete});
     setSnackbar({ ...snackbar, open: false });
     try {
-        // Gọi API xóa job thật
         const response = await apiService.deleteJobApi(jobIdToDelete);
-
-        // Cập nhật lại danh sách jobs trên UI sau khi xóa thành công
-        setJobs(prevJobs => prevJobs.filter(job => (job._id || job._id) !== jobIdToDelete)); // Dùng _id hoặc id tùy backend trả về
-
+        setJobs(prevJobs => prevJobs.filter(job => (job._id || job.id) !== jobIdToDelete));
         setSnackbar({ open: true, message: response.data?.message || 'Đã xóa tin tuyển dụng thành công!', severity: 'success' });
     } catch(err) {
          console.error("Lỗi khi xóa tin:", err);
@@ -176,154 +162,158 @@ function ManageJobsPage() {
     }
   };
 
+  if (loading || authState.isLoading) { // Check authState.isLoading as well
+    return <LoadingSpinner />;
+  }
+
+  if (error) {
+    return (
+        <Box sx={{p:2}}>
+            <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>Quản lý tin đăng</Typography>
+            <Alert severity="error" sx={{ mb: 2, p:2, borderRadius: '8px' }}>{error}</Alert>
+            <Button onClick={loadJobs} variant="outlined">Thử lại</Button>
+        </Box>
+    );
+  }
 
   return (
-    <Box>
-       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5">
+    <Box sx={{p: {xs: 1.5, sm: 2, md: 3}}}> {/* Responsive padding */}
+       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: 'primary.dark' }}>
                 Quản lý tin đăng
             </Typography>
             <Button
                 variant="contained"
-                startIcon={<AddIcon />}
+                color="primary"
+                startIcon={<AddCircleOutlineIcon />}
                 component={RouterLink}
-                to="/employer/post-job" // Link đến trang đăng tin mới
+                to="/employer/post-job"
+                sx={{ borderRadius: '8px', fontWeight: 600, px: 2.5, py: 1.2 }}
             >
                 Đăng tin mới
             </Button>
        </Box>
 
-
-      {loading && <LoadingSpinner />}
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {!loading && !error && (
-        <TableContainer component={Paper}>
-          <Table sx={{ minWidth: 650 }} aria-label="Manage jobs table">
-            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-              <TableRow>
-                <TableCell>Chức danh</TableCell>
-                <TableCell>Ngày đăng</TableCell>
-                <TableCell align="center">Trạng thái</TableCell>
-                <TableCell align="center">Ứng viên</TableCell>
-                <TableCell align="center">Hành động</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {jobs.length > 0 ? (
-                jobs.map((job) => {
-                  // <<< KHAI BÁO currentJobId Ở ĐÂY CHO MỖI JOB >>>
-                  const currentJobId = job._id || job.id;
-                  const isActionLoading = actionLoading.id === currentJobId;
-
-                  return (
-                    <TableRow key={currentJobId} hover>
-                      <TableCell component="th" scope="row">
-                        <Typography variant="subtitle2">{job.title}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        {job.createdAt ? new Date(job.createdAt).toLocaleDateString('vi-VN') : '-'}
-                        {job.applicationDeadline && (
-                          <Typography variant="caption" display="block">
-                            Hạn: {new Date(job.applicationDeadline).toLocaleDateString('vi-VN')}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={job.status || 'N/A'}
-                          color={getJobStatusColor(job.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Link component={RouterLink} to={`/employer/jobs/${currentJobId}/applicants`} underline="hover">
-                          {job.applicantCount ?? 0}
-                        </Link>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Stack direction="row" spacing={0.5} justifyContent="center">
-                          <Tooltip title="Sửa tin">
-                            <span>
-                              <IconButton
-                                size="small"
-                                component={RouterLink}
-                                to={`/employer/edit-job/${currentJobId}`} // Sử dụng currentJobId
-                                disabled={isActionLoading}
-                              >
-                                <EditIcon fontSize='small'/>
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Xem ứng viên">
-                           <span>
-                              <IconButton
-                                size="small"
-                                component={RouterLink}
-                                to={`/employer/jobs/${currentJobId}/applicants`} // Sử dụng currentJobId
-                                disabled={isActionLoading}
-                              >
-                                <VisibilityIcon fontSize='small'/>
-                              </IconButton>
-                           </span>
-                          </Tooltip>
-                          <Tooltip title={job.status === 'Active' ? 'Đóng tin' : 'Mở lại tin'}>
-                            <span>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleToggleStatus(currentJobId, job.status)} // Sử dụng currentJobId
-                                disabled={isActionLoading || job.status === 'Draft'}
-                                color={job.status === 'Active' ? 'warning' : 'success'}
-                              >
-                                {actionLoading.type === 'toggle' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : (job.status === 'Active' ? <ToggleOffIcon fontSize='small'/> : <ToggleOnIcon fontSize='small'/>)}
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                           <Tooltip title="Xóa tin">
-                               <span>
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() => handleDeleteClick(currentJobId)} // Sử dụng currentJobId
-                                  disabled={isActionLoading}
-                                >
-                                   {actionLoading.type === 'delete' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : <DeleteIcon fontSize='small'/>}
-                                </IconButton>
-                               </span>
-                          </Tooltip>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
+        <Paper sx={{ borderRadius: '12px', boxShadow: theme.shadows[3], overflow: 'hidden' }}>
+            <TableContainer>
+            <Table sx={{ minWidth: 750 }} aria-label="Manage jobs table">
+                <TableHead sx={{ bgcolor: alpha(theme.palette.primary.light, 0.1) }}>
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    Bạn chưa đăng tin tuyển dụng nào.
-                  </TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: 'primary.dark', py: 1.5 }}>Chức danh</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: 'primary.dark', py: 1.5 }}>Ngày đăng</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 600, color: 'primary.dark', py: 1.5 }}>Trạng thái</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 600, color: 'primary.dark', py: 1.5 }}>Ứng viên</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 600, color: 'primary.dark', py: 1.5, width: '220px' }}>Hành động</TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+                </TableHead>
+                <TableBody>
+                {jobs.length > 0 ? (
+                    jobs.map((job) => {
+                    const currentJobId = job._id || job.id; // Use _id from MongoDB
+                    const isActionLoading = actionLoading.id === currentJobId;
 
-       {/* Dialog Xác nhận Xóa */}
+                    return (
+                        <TableRow key={currentJobId} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                        <TableCell component="th" scope="row">
+                            <Link component={RouterLink} to={`/employer/jobs/${currentJobId}/applicants`} underline="hover" sx={{fontWeight: 500, color: 'text.primary'}}>
+                                {job.title || 'Chưa có tiêu đề'}
+                            </Link>
+                            <Typography variant="caption" display="block" color="text.secondary">
+                                ID: {currentJobId}
+                            </Typography>
+                        </TableCell>
+                        <TableCell>
+                            {formatDisplayDate(job.createdAt || job.datePosted)}
+                            {job.applicationDeadline && (
+                            <Typography variant="caption" display="block" color="text.secondary">
+                                Hạn: {formatDisplayDate(job.applicationDeadline)}
+                            </Typography>
+                            )}
+                        </TableCell>
+                        <TableCell align="center">
+                            <Chip
+                            label={job.status || 'N/A'}
+                            color={getJobStatusColor(job.status)}
+                            size="small"
+                            sx={{fontWeight: 500, borderRadius: '8px', px: 1}}
+                            />
+                        </TableCell>
+                        <TableCell align="center">
+                            <Link component={RouterLink} to={`/employer/jobs/${currentJobId}/applicants`} underline="hover" sx={{fontWeight: 500}}>
+                            {job.applicantCount ?? 0}
+                            </Link>
+                        </TableCell>
+                        <TableCell align="center">
+                            <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="Sửa tin">
+                                <span>
+                                <IconButton size="small" component={RouterLink} to={`/employer/edit-job/${currentJobId}`} disabled={isActionLoading}>
+                                    <EditIcon fontSize='small'/>
+                                </IconButton>
+                                </span>
+                            </Tooltip>
+                            <Tooltip title="Xem ứng viên">
+                            <span>
+                                <IconButton size="small" component={RouterLink} to={`/employer/jobs/${currentJobId}/applicants`} disabled={isActionLoading}>
+                                    <VisibilityOutlinedIcon fontSize='small'/>
+                                </IconButton>
+                            </span>
+                            </Tooltip>
+                            <Tooltip title={job.status === 'Active' ? 'Đóng tin' : 'Mở lại tin'}>
+                                <span>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => handleToggleStatus(currentJobId, job.status)}
+                                    disabled={isActionLoading || job.status === 'Draft'} // Cannot toggle Draft status directly
+                                    color={job.status === 'Active' ? 'warning' : 'success'}
+                                >
+                                    {actionLoading.type === 'toggle' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : (job.status === 'Active' ? <ToggleOffOutlinedIcon fontSize='small'/> : <ToggleOnOutlinedIcon fontSize='small'/>)}
+                                </IconButton>
+                                </span>
+                            </Tooltip>
+                            <Tooltip title="Xóa tin">
+                                <span>
+                                <IconButton size="small" color="error" onClick={() => handleDeleteClick(currentJobId)} disabled={isActionLoading}>
+                                    {actionLoading.type === 'delete' && isActionLoading ? <CircularProgress size={18} color="inherit"/> : <DeleteOutlineIcon fontSize='small'/>}
+                                </IconButton>
+                                </span>
+                            </Tooltip>
+                            </Stack>
+                        </TableCell>
+                        </TableRow>
+                    );
+                    })
+                ) : (
+                    <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{py:4}}>
+                        <Stack alignItems="center" spacing={1} sx={{color: 'text.secondary'}}>
+                            <PlaylistPlayIcon sx={{fontSize: 48, opacity: 0.7}}/>
+                            <Typography>Bạn chưa đăng tin tuyển dụng nào.</Typography>
+                            <Button variant="text" component={RouterLink} to="/employer/post-job" startIcon={<AddCircleOutlineIcon/>}>
+                                Đăng tin ngay
+                            </Button>
+                        </Stack>
+                    </TableCell>
+                    </TableRow>
+                )}
+                </TableBody>
+            </Table>
+            </TableContainer>
+        </Paper>
+
       <ConfirmDialog
         open={showDeleteConfirm}
         onClose={handleCloseDeleteDialog}
         onConfirm={handleConfirmDelete}
         title="Xác nhận xóa tin đăng"
-        contentText="Bạn có chắc chắn muốn xóa tin tuyển dụng này không? Hành động này không thể hoàn tác."
+        contentText={`Bạn có chắc chắn muốn xóa tin tuyển dụng "${jobs.find(j => (j._id || j.id) === deletingJobId)?.title || 'này'}" không? Hành động này không thể hoàn tác.`}
       />
 
-      {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={handleCloseSnackbar}>
-          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}>
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} variant="filled" sx={{ width: '100%', boxShadow: 6, borderRadius: '8px' }}>
               {snackbar.message}
           </Alert>
       </Snackbar>
-
     </Box>
   );
 }

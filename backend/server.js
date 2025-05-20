@@ -9,7 +9,7 @@ const authRoutes = require('./routes/authRoutes');
 const jobRoutes = require('./routes/jobRoutes'); // Giữ lại cho public jobs
 const applicationRoutes = require('./routes/applicationRoutes');
 const userRoutes = require('./routes/userRoutes');
-
+const notificationRoutes = require('./routes/notificationRoutes'); // <<< THÊM IMPORT
 const app = express();
 const port = process.env.PORT || 5001;
 
@@ -64,6 +64,7 @@ app.use('/api/applications', applicationRoutes); // Application routes
 app.use('/api/users', userRoutes); // <<< THÊM DÒNG NÀY (User profile routes)
 app.use('/api/companies', companyRoutes);
 app.use('/api/tests', testRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Kết nối MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB Connected Successfully!'))

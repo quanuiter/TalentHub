@@ -1,10 +1,11 @@
 // src/pages/RegisterPage.jsx
+"use client"; // Giữ lại nếu bạn có lý do cụ thể, thường không cần cho React thuần
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+
 // Import Material UI components & Icons
-import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Link from '@mui/material/Link'; // MUI Link
@@ -19,71 +20,89 @@ import RadioGroup from '@mui/material/RadioGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormControl from '@mui/material/FormControl';
 import FormLabel from '@mui/material/FormLabel';
-import Divider from '@mui/material/Divider'; // Thêm Divider
-import Checkbox from '@mui/material/Checkbox'; // Thêm Checkbox
-import InputAdornment from '@mui/material/InputAdornment'; // Cho icon trong TextField
-import IconButton from '@mui/material/IconButton'; // Cho nút icon
-import Visibility from '@mui/icons-material/Visibility'; // Icon hiện pass
-import VisibilityOff from '@mui/icons-material/VisibilityOff'; // Icon ẩn pass
-import GoogleIcon from '@mui/icons-material/Google'; // Icon Google (cần cài @mui/icons-material)
+import Divider from '@mui/material/Divider';
+import Checkbox from '@mui/material/Checkbox';
+import InputAdornment from '@mui/material/InputAdornment';
+import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper'; // Sử dụng Paper
+import { useTheme, alpha } from '@mui/material/styles'; // Thêm useTheme
+
+// Icons
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import GoogleIcon from '@mui/icons-material/Google';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
+import VpnKeyOutlinedIcon from '@mui/icons-material/VpnKeyOutlined';
+import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined'; // Icon cho tên công ty
+import LockPersonOutlinedIcon from '@mui/icons-material/LockPersonOutlined'; // Icon cho avatar
+import Avatar from '@mui/material/Avatar';
 
 function RegisterPage() {
   const navigate = useNavigate();
-  const { register } = useAuth(); // Lấy hàm register từ context
-  // State cho các trường input
+  const { register, authState } = useAuth(); // Lấy authState để kiểm tra nếu đã đăng nhập
+  const theme = useTheme();
+
   const [formData, setFormData] = useState({
-    fullName: '', // Thay firstName/lastName bằng fullName
+    fullName: '',
     email: '',
     password: '',
-    role: 'candidate',
+    role: 'candidate', // Mặc định là candidate
     companyName: ''
   });
-  const [confirmPassword, setConfirmPassword] = useState(''); // Tách confirmPassword ra
-  const [agreeToTerms, setAgreeToTerms] = useState(false); // State cho checkbox điều khoản
-  const [showPassword, setShowPassword] = useState(false); // State ẩn/hiện password
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // State ẩn/hiện confirm password
-
-  // State cho lỗi và loading
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false); // Loading riêng cho nút Google
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Xử lý thay đổi input
+  // Tự động điều hướng nếu đã đăng nhập
+    useEffect(() => {
+        if (authState.isAuthenticated && authState.user) {
+            let targetPath = '/';
+            if (authState.user.role === 'employer') {
+                targetPath = '/employer/dashboard';
+            } else if (authState.user.role === 'candidate') {
+                targetPath = '/candidate/dashboard';
+            }
+            navigate(targetPath, { replace: true });
+        }
+    }, [authState.isAuthenticated, authState.user, navigate]);
+
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData(prevData => ({
       ...prevData,
       [name]: value,
     }));
+    if (error) setError(null); // Xóa lỗi khi người dùng bắt đầu nhập lại
   };
 
-  // Toggle ẩn/hiện mật khẩu
   const handleClickShowPassword = () => setShowPassword((show) => !show);
   const handleClickShowConfirmPassword = () => setShowConfirmPassword((show) => !show);
   const handleMouseDownPassword = (event) => {
-    event.preventDefault(); // Ngăn focus nhảy khi bấm icon
+    event.preventDefault();
   };
 
-  // --- Xử lý Đăng ký bằng Google (Placeholder) ---
   const handleGoogleSignUp = async () => {
-      setGoogleLoading(true);
-      setError(null);
-      console.log("Đăng ký bằng Google - Chức năng này cần cài đặt thư viện và cấu hình phía backend.");
-      // Giả lập
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      // setError("Tính năng đăng ký Google chưa được kích hoạt.");
-      setGoogleLoading(false);
+     setGoogleLoading(true);
+     setError(null);
+     console.log("Đăng ký bằng Google - Chức năng này cần cài đặt thư viện và cấu hình.");
+     await new Promise(resolve => setTimeout(resolve, 1500));
+     setError("Tính năng đăng ký với Google hiện chưa khả dụng. Vui lòng thử lại sau.");
+     setGoogleLoading(false);
   };
 
-  // --- Xử lý khi submit form Email ---
-  const handleSubmitEmail = async (event) => { // <<< THÊM ASYNC
+  const handleSubmitEmail = async (event) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
 
-    // --- Validation (giữ nguyên) ---
     if (!formData.fullName || !formData.email || !formData.password || !confirmPassword) {
-      setError("Vui lòng điền đầy đủ thông tin bắt buộc."); setLoading(false); return;
+      setError("Vui lòng điền đầy đủ các thông tin bắt buộc (*)."); setLoading(false); return;
     }
     if (formData.password !== confirmPassword) {
       setError("Mật khẩu và xác nhận mật khẩu không khớp."); setLoading(false); return;
@@ -91,274 +110,221 @@ function RegisterPage() {
     if (formData.password.length < 6) {
       setError("Mật khẩu phải có ít nhất 6 ký tự."); setLoading(false); return;
     }
+    if (formData.role === 'employer' && !formData.companyName.trim()) {
+      setError("Vui lòng nhập Tên công ty.");
+      setLoading(false);
+      return;
+    }
     if (!agreeToTerms) {
-      setError("Bạn cần đồng ý với Điều khoản và Chính sách để đăng ký."); setLoading(false); return;
+      setError("Bạn cần đồng ý với Điều khoản dịch vụ và Chính sách bảo mật để tiếp tục."); setLoading(false); return;
     }
 
-    // --- Gọi API Backend thông qua context ---
     try {
-        // Chuẩn bị data gửi đi (có thể bỏ confirmPassword)
-        const userData = {
-            fullName: formData.fullName,
-            email: formData.email,
-            password: formData.password,
-            role: formData.role,
-            companyName: formData.role === 'employer' ? formData.companyName : undefined, // Gửi companyName nếu là employer
-        };
-        if (formData.role === 'employer' && !userData.companyName) {
-          setError("Vui lòng nhập Tên công ty.");
-          setLoading(false);
-          return;
-      }
-        // Gọi hàm register từ context
-        const result = await register(userData); // <<< DÙNG AWAIT
-
-        console.log("Registration successful (API Response):", result);
-        // Đăng ký thành công, backend đã trả về 201
-        // Chuyển hướng người dùng đến trang đăng nhập để họ đăng nhập lại
-        navigate('/login', { state: { registrationSuccess: true } }); // Gửi kèm state để trang login có thể hiển thị thông báo (tùy chọn)
+      const userData = {
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        role: formData.role,
+        companyName: formData.role === 'employer' ? formData.companyName.trim() : undefined,
+      };
+      
+      await register(userData); // register từ AuthContext đã xử lý API
+      // AuthContext sẽ tự động cập nhật authState và có thể điều hướng hoặc LoginPage sẽ tự điều hướng dựa trên authState.isAuthenticated
+      // Để đơn giản, sau khi đăng ký thành công, điều hướng đến trang login với thông báo
+      navigate('/login', { state: { registrationSuccess: true, email: userData.email } });
 
     } catch (err) {
-        console.error("[RegisterPage] Registration failed:", err);
-        // Hiển thị lỗi trả về từ API (nếu có) hoặc lỗi chung
-        setError(err.response?.data?.message || err.message || "Đăng ký thất bại. Vui lòng thử lại.");
-        setLoading(false);
+      console.error("[RegisterPage] Registration failed:", err);
+      setError(err.response?.data?.message || err.message || "Đăng ký thất bại. Email có thể đã được sử dụng hoặc có lỗi xảy ra.");
+    } finally {
+      setLoading(false);
     }
-    // Không cần setLoading(false) ở đây nữa vì đã có trong catch hoặc sau khi navigate
   };
-  // --- KẾT THÚC SỬA ĐỔI ---
 
   return (
-    // Container giới hạn chiều rộng và căn giữa
-    <Container component="main" maxWidth="sm"> {/* Tăng maxWidth lên sm */}
-      <Box
-        sx={{
-          marginTop: 4, // Giảm margin top
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          mb: 4 // Thêm margin bottom
-        }}
-      >
-        {/* Bỏ Avatar, dùng Typography */}
-        <Typography component="h1" variant="h4" sx={{ mb: 3 }}>
-          Sign up
-        </Typography>
-
-        {/* Google Sign Up Button */}
-        <Button
-          fullWidth
-          variant="outlined" // Kiểu viền ngoài
-          startIcon={googleLoading ? <CircularProgress size={20} color="inherit"/> : <GoogleIcon />}
-          onClick={handleGoogleSignUp}
-          disabled={googleLoading || loading}
-          sx={{ mb: 2, py: 1.2, textTransform: 'none', fontSize: '1rem' }} // Tùy chỉnh style nút Google
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 'calc(100vh - 64px - 56px)', // Giả sử header 64px, footer 56px
+        bgcolor: alpha(theme.palette.primary.light, 0.03), // Nền rất nhẹ
+        py: { xs: 3, sm: 5 }, // Padding top/bottom
+      }}
+    >
+      <Container component="main" maxWidth="sm">
+        <Paper
+          elevation={5}
+          sx={{
+            padding: { xs: 3, sm: 4, md: 5 },
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            borderRadius: '20px', // Bo góc mềm mại hơn
+            bgcolor: 'background.paper',
+          }}
         >
-           Sign up with Google
-        </Button>
+          <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 60, height: 60 }}>
+            <LockPersonOutlinedIcon fontSize="large"/>
+          </Avatar>
+          <Typography component="h1" variant="h4" sx={{ mb: 3, fontWeight: 'bold', color: 'text.primary' }}>
+            Tạo tài khoản mới
+          </Typography>
 
-        {/* OR Separator */}
-        <Divider sx={{ width: '100%', mb: 2 }}>OR</Divider>
+          <Button
+            fullWidth
+            variant="outlined"
+            color="primary" // Hoặc màu khác nếu muốn
+            startIcon={googleLoading ? <CircularProgress size={20} color="inherit"/> : <GoogleIcon />}
+            onClick={handleGoogleSignUp}
+            disabled={googleLoading || loading}
+            sx={{ mb: 2.5, py: 1.2, textTransform: 'none', fontSize: '1rem', borderRadius: '8px', borderColor: alpha(theme.palette.text.primary, 0.3) }}
+          >
+            Đăng ký với Google
+          </Button>
 
-        {/* Hiển thị lỗi nếu có */}
-        {error && (
-          <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+          <Divider sx={{ width: '100%', mb: 2.5, fontSize: '0.9rem', color: 'text.secondary' }}>HOẶC ĐĂNG KÝ BẰNG EMAIL</Divider>
 
-        {/* Email Sign Up Form */}
-        <Box component="form" noValidate onSubmit={handleSubmitEmail} sx={{ width: '100%' }}>
-          <Grid spacing={4}>
-            {/* Full Name */}
-            <Grid item xs={12} sx={{ mb: 2 }} >
-              <TextField
-                autoComplete="name"
-                name="fullName"
-                required
-                fullWidth
-                id="fullName"
-                label="Your Name" // Đổi label
-                autoFocus
-                value={formData.fullName}
-                onChange={handleChange}
-                disabled={loading || googleLoading}
-                variant="outlined" // Thêm variant
-              />
-            </Grid>
+          {error && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2.5, borderRadius: '8px' }}>
+              {error}
+            </Alert>
+          )}
 
-            {/* Email */}
-            <Grid item xs={12} sx={{ mb: 2 }}>
-              <TextField
-                required
-                fullWidth
-                id="email"
-                label="Email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                value={formData.email}
-                onChange={handleChange}
-                disabled={loading || googleLoading}
-                variant="outlined"
-              />
-            </Grid>
-
-            {/* Password */}
-            <Grid item xs={12} sx={{ mb: 2 }}>
-              <TextField
-                required
-                fullWidth
-                name="password"
-                label="Password"
-                type={showPassword ? 'text' : 'password'}
-                id="password"
-                autoComplete="new-password"
-                value={formData.password}
-                onChange={handleChange}
-                disabled={loading || googleLoading}
-                helperText="Ít nhất 6 ký tự"
-                variant="outlined"
-                InputProps={{ // Thêm icon ẩn/hiện
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label="toggle password visibility"
-                        onClick={handleClickShowPassword}
-                        onMouseDown={handleMouseDownPassword}
-                        edge="end"
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              {/* Có thể thêm phần checklist yêu cầu mật khẩu ở đây nếu muốn */}
-            </Grid>
-
-            {/* Confirm Password */}
-             <Grid item xs={12} sx={{ mb: 2 }} >
-              <TextField
-                required
-                fullWidth
-                name="confirmPassword" // Name này ko cần trong state formData chính
-                label="Confirm Password"
-                type={showConfirmPassword ? 'text' : 'password'}
-                id="confirmPassword"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)} // Dùng state riêng
-                disabled={loading || googleLoading}
-                variant="outlined"
-                error={formData.password !== confirmPassword && confirmPassword !== ''}
-                helperText={
-                    formData.password !== confirmPassword && confirmPassword !== ''
-                    ? "Mật khẩu không khớp"
-                    : ""
-                }
-                 InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label="toggle confirm password visibility"
-                        onClick={handleClickShowConfirmPassword}
-                        onMouseDown={handleMouseDownPassword}
-                        edge="end"
-                      >
-                        {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
-
-             {/* Role Selection - Giữ lại theo yêu cầu dự án */}
-             <Grid item xs={12}>
-                 <FormControl component="fieldset" required disabled={loading || googleLoading} sx={{mt: 1}}>
-                    <FormLabel component="legend">Bạn là?</FormLabel>
-                    <RadioGroup
-                        row
-                        aria-label="role"
-                        name="role"
-                        value={formData.role}
-                        onChange={handleChange}
-                    >
-                        <FormControlLabel value="candidate" control={<Radio size="small"/>} label="Ứng viên" />
+          <Box component="form" noValidate onSubmit={handleSubmitEmail} sx={{ width: '100%' }}>
+            <Grid container spacing={2.5}> {/* Tăng spacing giữa các Grid item */}
+              <Grid item xs={12} width={'100%'}>
+                <TextField
+                  autoComplete="name" name="fullName" required fullWidth id="fullName"
+                  label="Họ và Tên (*)" autoFocus value={formData.fullName} onChange={handleChange}
+                  disabled={loading || googleLoading} variant="outlined" size="small"
+                  InputProps={{ startAdornment: (<InputAdornment position="start"><PersonOutlineIcon color="action"/></InputAdornment>), sx: {borderRadius: '8px'} }}
+                />
+              </Grid>
+              <Grid item xs={12} width={'100%'}>
+                <TextField
+                  required fullWidth id="email" label="Địa chỉ Email (*)" name="email" type="email"
+                  autoComplete="email" value={formData.email} onChange={handleChange}
+                  disabled={loading || googleLoading} variant="outlined" size="small"
+                  InputProps={{ startAdornment: (<InputAdornment position="start"><EmailOutlinedIcon color="action"/></InputAdornment>), sx: {borderRadius: '8px'} }}
+                />
+              </Grid>
+              <Grid item xs={12} width={'100%'}>
+                <TextField
+                  required fullWidth name="password" label="Mật khẩu (*)"
+                  type={showPassword ? 'text' : 'password'} id="password"
+                  autoComplete="new-password" value={formData.password} onChange={handleChange}
+                  disabled={loading || googleLoading} helperText="Ít nhất 6 ký tự" variant="outlined" size="small"
+                  InputProps={{
+                    startAdornment: (<InputAdornment position="start"><VpnKeyOutlinedIcon color="action"/></InputAdornment>),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton aria-label="toggle password visibility" onClick={handleClickShowPassword} onMouseDown={handleMouseDownPassword} edge="end">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                    sx: {borderRadius: '8px'}
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} width={'100%'}>
+                <TextField
+                  required fullWidth name="confirmPassword" label="Xác nhận Mật khẩu (*)"
+                  type={showConfirmPassword ? 'text' : 'password'} id="confirmPassword"
+                  autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading || googleLoading} variant="outlined" size="small"
+                  error={formData.password !== confirmPassword && confirmPassword !== ''}
+                  helperText={formData.password !== confirmPassword && confirmPassword !== '' ? "Mật khẩu không khớp" : ""}
+                  InputProps={{
+                    startAdornment: (<InputAdornment position="start"><VpnKeyOutlinedIcon color="action"/></InputAdornment>),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton aria-label="toggle confirm password visibility" onClick={handleClickShowConfirmPassword} onMouseDown={handleMouseDownPassword} edge="end">
+                          {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                    sx: {borderRadius: '8px'}
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                  <FormControl component="fieldset" required disabled={loading || googleLoading} sx={{mt: 1}}>
+                    <FormLabel component="legend" sx={{fontSize: '0.9rem', mb: 0.5}}>Bạn là:</FormLabel>
+                    <RadioGroup row aria-label="role" name="role" value={formData.role} onChange={handleChange}>
+                        <FormControlLabel value="candidate" control={<Radio size="small"/>} label="Ứng viên tìm việc" />
                         <FormControlLabel value="employer" control={<Radio size="small"/>} label="Nhà tuyển dụng" />
                     </RadioGroup>
-                </FormControl>
-             </Grid>
-             {formData.role === 'employer' && (
-                     <Grid item xs={12}>
-                         <TextField
-                             name="companyName" // <<< name phải là companyName
-                             required // Bắt buộc nếu là employer
-                             fullWidth
-                             id="companyName"
-                             label="Tên công ty"
-                             value={formData.companyName} // <<< Lấy từ state
-                             onChange={handleChange} // <<< Dùng chung handleChange
-                             disabled={loading}
-                             variant="outlined"
-                             sx={{ mt: 1 }} // Thêm margin top nhỏ
-                         />
-                     </Grid>
-                 )}
-             {/* Terms and Conditions Checkbox */}
-             <Grid item xs={12}>
-                 <FormControlLabel
+                  </FormControl>
+              </Grid>
+              {formData.role === 'employer' && (
+                  <Grid item xs={12} width={'100%'}>
+                      <TextField
+                          name="companyName" required fullWidth id="companyName" label="Tên công ty (*)"
+                          value={formData.companyName} onChange={handleChange}
+                          disabled={loading || googleLoading} variant="outlined" size="small"
+                          InputProps={{ startAdornment: (<InputAdornment position="start"><BusinessOutlinedIcon color="action"/></InputAdornment>), sx: {borderRadius: '8px'} }}
+                      />
+                  </Grid>
+              )}
+              <Grid item xs={12}>
+                  <FormControlLabel
                     control={
                         <Checkbox
                             checked={agreeToTerms}
                             onChange={(e) => setAgreeToTerms(e.target.checked)}
-                            name="agreeToTerms"
-                            color="primary"
+                            name="agreeToTerms" color="primary" size="small"
                             disabled={loading || googleLoading}
                         />
                     }
                     label={
-                        <Typography variant="body2">
+                        <Typography variant="body2" color="text.secondary">
                             Tôi đã đọc và đồng ý với{' '}
-                            <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer"> {/* target="_blank" để mở tab mới */}
+                            <Link component={RouterLink} to="/terms" target="_blank" rel="noopener noreferrer" sx={{fontWeight: 500}}>
                                 Điều khoản dịch vụ
                             </Link>{' '}
                             và{' '}
-                            <Link component={RouterLink} to="/privacy" target="_blank" rel="noopener noreferrer">
+                            <Link component={RouterLink} to="/privacy" target="_blank" rel="noopener noreferrer" sx={{fontWeight: 500}}>
                                 Chính sách bảo mật
                             </Link>
-                            .
+                            . (*)
                         </Typography>
                     }
-                    sx={{ mt: 1 }}
-                 />
-             </Grid>
-
-          </Grid> {/* End Grid container */}
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2, py: 1.2, fontSize: '1rem' }} // Style nút chính
-            disabled={loading || googleLoading || !agreeToTerms} // Disable nếu chưa đồng ý điều khoản
-          >
-            {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign up with Email'}
-          </Button>
-
-          {/* Link tới trang Đăng nhập */}
-          <Grid container justifyContent="center"> {/* Căn giữa link này */}
-            <Grid item>
-              <Link component={RouterLink} to="/login" variant="body2">
-                Already have an account? Sign in now!
-              </Link>
+                    sx={{ mt: 0.5 }}
+                   />
+              </Grid>
             </Grid>
-          </Grid>
-        </Box> {/* End Form Box */}
-      </Box>
-       {/* Bỏ Copyright ở đây nếu muốn giống hình mẫu */}
-    </Container>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="primary"
+              sx={{ mt: 3, mb: 2, py: 1.5, borderRadius: '12px', fontWeight: 'bold', fontSize: '1.05rem', boxShadow: theme.shadows[3] }}
+              disabled={loading || googleLoading || !agreeToTerms}
+            >
+              {loading ? <CircularProgress size={26} color="inherit" /> : 'Đăng ký tài khoản'}
+            </Button>
+            <Grid container justifyContent="center">
+              <Grid item>
+                <Link component={RouterLink} to="/login" variant="body2" sx={{textDecoration: 'none', '&:hover': {textDecoration: 'underline'}}}>
+                  Đã có tài khoản? Đăng nhập ngay
+                </Link>
+              </Grid>
+            </Grid>
+          </Box>
+        </Paper>
+        <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 6, mb: 3 }}>
+            {'Copyright © '}
+            <Link color="inherit" component={RouterLink} to="/" sx={{textDecoration: 'none', '&:hover':{color:'primary.main'}}}>
+                TalentHub
+            </Link>{' '}
+            {new Date().getFullYear()}
+            {'.'}
+        </Typography>
+      </Container>
+    </Box>
   );
 }
 

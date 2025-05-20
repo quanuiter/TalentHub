@@ -1,6 +1,6 @@
 // src/pages/employer/ApplicantsPage.jsx
-import React, { useState, useEffect } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react'; // Thêm useCallback
+import { Link as RouterLink, useParams, useNavigate } from 'react-router-dom'; // Thêm useNavigate
 import apiService from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -32,15 +32,15 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import FormLabel from '@mui/material/FormLabel';
-import RadioGroup from '@mui/material/RadioGroup';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Radio from '@mui/material/Radio';
-import Button from '@mui/material/Button';
+// import Dialog from '@mui/material/Dialog'; // Không cần thiết nếu chỉ dùng Dialog chuyên biệt
+// import DialogTitle from '@mui/material/DialogTitle';
+// import DialogContent from '@mui/material/DialogContent';
+// import DialogActions from '@mui/material/DialogActions';
+// import FormLabel from '@mui/material/FormLabel';
+// import RadioGroup from '@mui/material/RadioGroup';
+// import FormControlLabel from '@mui/material/FormControlLabel';
+// import Radio from '@mui/material/Radio';
+// import Button from '@mui/material/Button'; // Button được dùng trong các Dialog con
 
 // Import Icons
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -48,86 +48,144 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import ArticleIcon from '@mui/icons-material/Article';
 import DescriptionIcon from '@mui/icons-material/Description';
 import RateReviewIcon from '@mui/icons-material/RateReview';
-import LinkIcon from '@mui/icons-material/Link';
-import AssignmentIcon from '@mui/icons-material/Assignment';
+// import LinkIcon from '@mui/icons-material/Link'; // Không thấy dùng trực tiếp ở đây
+import AssignmentIcon from '@mui/icons-material/Assignment'; // Icon cho gửi bài test
 
 const applicantStatuses = [
     'Đã nộp', 'Đã xem', 'Phù hợp', 'Mời phỏng vấn', 'Trúng tuyển', 'Từ chối', 'Đã gửi bài test'
 ];
 
 const getApplicantStatusColor = (status) => {
-  switch (status?.toLowerCase()) {
-    case 'mời phỏng vấn': case 'trúng tuyển': case 'phù hợp': return 'success';
-    case 'đã xem': return 'info';
-    case 'từ chối': return 'error';
-    case 'đã gửi bài test': return 'secondary';
-    case 'đã nộp': default: return 'primary';
-  }
+    const lowerStatus = status?.toLowerCase();
+    switch (lowerStatus) {
+        case 'mời phỏng vấn':
+        case 'trúng tuyển':
+        case 'phù hợp':
+            return 'success';
+        case 'đã xem':
+            return 'info';
+        case 'từ chối':
+            return 'error';
+        case 'đã gửi bài test':
+            return 'secondary';
+        case 'đã nộp':
+        default:
+            return 'primary';
+    }
 };
 
 const formatShortDateTime = (isoString) => {
     if (!isoString) return 'N/A';
-    const date = new Date(isoString);
-    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
-           date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return 'Ngày giờ không hợp lệ';
+        return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+               date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return 'Lỗi ngày giờ';
+    }
 };
 
-const API_DOMAIN = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5001';
+// API_DOMAIN có thể không cần thiết nếu bạn không xây dựng URL thủ công nữa
+// const API_DOMAIN = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5001';
 
 function ApplicantsPage() {
-  const { jobId } = useParams();
+  const { jobId } = useParams(); // ID của job cụ thể (nếu có từ URL)
   const { authState } = useAuth();
+  const navigate = useNavigate(); // Thêm navigate
 
   const [applicants, setApplicants] = useState([]);
-  const [loading, setLoading] = useState(true); // Initial loading state
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [jobDetailsForTitle, setJobDetailsForTitle] = useState(null);
+  const [jobDetailsForTitle, setJobDetailsForTitle] = useState(null); // Lưu chi tiết job để hiển thị title
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null); // ID của application đang được cập nhật status
 
   // States for Dialogs
   const [openViewProfileDialog, setOpenViewProfileDialog] = useState(false);
-  const [selectedCandidateProfile, setSelectedCandidateProfile] = useState(null);
+  const [selectedCandidateProfile, setSelectedCandidateProfile] = useState(null); // Lưu trữ object candidateId đã populate
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [openInviteDialog, setOpenInviteDialog] = useState(false);
-  const [selectedApplicantForInvite, setSelectedApplicantForInvite] = useState(null);
-  const [openEvaluateDialog, setOpenEvaluateDialog] = useState(false);
-  const [selectedApplicantForEvaluation, setSelectedApplicantForEvaluation] = useState(null);
-  const [evaluationLoading, setEvaluationLoading] = useState(false);
-  const [openViewCoverLetterDialog, setOpenViewCoverLetterDialog] = useState(false);
-  const [selectedApplicantForCoverLetter, setSelectedApplicantForCoverLetter] = useState(null);
-  const [jobAssociatedTests, setJobAssociatedTests] = useState([]);
-  const [openSendTestDialog, setOpenSendTestDialog] = useState(false);
-  const [selectedApplicantForTest, setSelectedApplicantForTest] = useState(null);
-  const [selectedTestToSend, setSelectedTestToSend] = useState('');
-  const [sendingTest, setSendingTest] = useState(false);
 
+  const [openInviteDialog, setOpenInviteDialog] = useState(false);
+  const [selectedApplicantForInvite, setSelectedApplicantForInvite] = useState(null); // Lưu trữ toàn bộ object application
+
+  const [openEvaluateDialog, setOpenEvaluateDialog] = useState(false);
+  const [selectedApplicantForEvaluation, setSelectedApplicantForEvaluation] = useState(null); // Lưu trữ toàn bộ object application
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
+
+  const [openViewCoverLetterDialog, setOpenViewCoverLetterDialog] = useState(false);
+  const [selectedApplicantForCoverLetter, setSelectedApplicantForCoverLetter] = useState(null); // Lưu trữ toàn bộ object application
+
+  // States cho việc gửi bài test (sử dụng chung InviteDialog)
+  const [availableTests, setAvailableTests] = useState([]); // Danh sách tất cả bài test của NTD
+  const [loadingTests, setLoadingTests] = useState(true); // Đổi tên từ false để thể hiện đúng trạng thái ban đầu
+
+  // --- useEffect: Tải danh sách bài test của Nhà tuyển dụng ---
+  useEffect(() => {
+    const loadEmployerTests = async () => {
+        if (authState.user?.id) {
+            console.log("[ApplicantsPage] Attempting to load employer tests...");
+            setLoadingTests(true);
+            try {
+                const response = await apiService.getMyTestsApi();
+                console.log("[ApplicantsPage] Raw response from getMyTestsApi:", response);
+                if (response && Array.isArray(response.data)) {
+                    console.log("[ApplicantsPage] Employer tests fetched successfully:", response.data);
+                    setAvailableTests(response.data);
+                } else {
+                    console.warn("[ApplicantsPage] No tests data or invalid format from getMyTestsApi. Response data:", response.data);
+                    setAvailableTests([]);
+                }
+            } catch (err) {
+                console.error("[ApplicantsPage] Error loading employer tests:", err.response?.data || err.message || err);
+                setSnackbar({ open: true, message: 'Lỗi: Không thể tải danh sách bài test của bạn.', severity: 'error' });
+                setAvailableTests([]);
+            } finally {
+                console.log("[ApplicantsPage] Finished loading employer tests, setLoadingTests(false).");
+                setLoadingTests(false);
+            }
+        } else {
+            console.log("[ApplicantsPage] User not available or not authenticated for loading tests.");
+            setAvailableTests([]);
+            setLoadingTests(false);
+        }
+    };
+
+    if (authState.isAuthenticated && !authState.isLoading) {
+        loadEmployerTests();
+    }
+  }, [authState.user?.id, authState.isAuthenticated, authState.isLoading]);
+
+  // --- useEffect: Tải danh sách ứng viên và chi tiết công việc (nếu có jobId) ---
   useEffect(() => {
     const loadData = async () => {
       console.log(`[ApplicantsPage] Initiating data load. JobId: ${jobId}, User ID: ${authState.user?.id}`);
-      setLoading(true); // Set loading to true at the beginning of data fetching
+      setLoading(true);
       setError(null);
       setApplicants([]);
       setJobDetailsForTitle(null);
-      setJobAssociatedTests([]);
+      // Không reset jobAssociatedTests ở đây vì nó được fetch riêng hoặc đã có từ jobDetailRes
 
       try {
-        if (jobId) {
+        if (jobId) { // Nếu có jobId, nghĩa là xem ứng viên cho một job cụ thể
           console.log(`[ApplicantsPage] Fetching data for specific job ID: ${jobId}`);
           const [jobDetailRes, appsRes] = await Promise.all([
-            apiService.getJobDetailsApi(jobId),
-            apiService.getApplicantsForJobApi(jobId)
+            apiService.getJobDetailsApi(jobId), // API này cần trả về cả associatedTests đã populate
+            apiService.getApplicantsForJobApi(jobId) // API này cần trả về applications với candidateId và jobId đã populate
           ]);
 
           if (jobDetailRes?.data) {
             setJobDetailsForTitle(jobDetailRes.data);
-            if (jobDetailRes.data.associatedTests && Array.isArray(jobDetailRes.data.associatedTests)) {
-              setJobAssociatedTests(jobDetailRes.data.associatedTests.filter(t => t && (t._id || t.testId) && t.name && t.link));
-            }
-            console.log("[ApplicantsPage] Job details fetched:", jobDetailRes.data);
+            // Lấy associatedTests từ chi tiết job nếu có (backend cần populate trường này)
+            // if (jobDetailRes.data.associatedTests && Array.isArray(jobDetailRes.data.associatedTests)) {
+            //    setJobAssociatedTests(jobDetailRes.data.associatedTests.filter(t => t && t._id && t.name && t.link));
+            // } else {
+            //    setJobAssociatedTests([]);
+            // }
+            console.log("[ApplicantsPage] Job details fetched (including associated tests if any):", jobDetailRes.data);
           } else {
             console.warn(`[ApplicantsPage] No job details found for Job ID: ${jobId}`);
-            setError(`Không tìm thấy thông tin cho Job ID: ${jobId}`);
+            setError(`Không tìm thấy thông tin cho Job ID: ${jobId}. Có thể tin đã bị xóa hoặc không tồn tại.`);
           }
 
           if (appsRes && Array.isArray(appsRes.data)) {
@@ -135,16 +193,21 @@ function ApplicantsPage() {
             console.log("[ApplicantsPage] Applicants for specific job fetched:", appsRes.data.length);
           } else {
             console.warn("[ApplicantsPage] No applicants data or invalid format for specific job.");
-            setError(prevError => prevError ? `${prevError} Và không có dữ liệu ứng viên.` : "Không có dữ liệu ứng viên hoặc định dạng không hợp lệ.");
+            setApplicants([]); // Đảm bảo là mảng rỗng
+            // Không nên setError ở đây nếu jobDetail đã có lỗi, tránh ghi đè
+            if (!jobDetailRes?.data) {
+                setError(prevError => prevError ? `${prevError} Và không có dữ liệu ứng viên.` : "Không có dữ liệu ứng viên hoặc định dạng không hợp lệ.");
+            }
           }
-        } else {
+        } else { // Nếu không có jobId, xem tất cả ứng viên của employer
           console.log("[ApplicantsPage] Fetching all applicants for employer.");
-          const appsRes = await apiService.getAllApplicantsForEmployerApi();
+          const appsRes = await apiService.getAllApplicantsForEmployerApi(); // API này cần trả về applications với candidateId và jobId đã populate
           if (appsRes && Array.isArray(appsRes.data)) {
             setApplicants(appsRes.data);
             console.log("[ApplicantsPage] All applicants fetched:", appsRes.data.length);
           } else {
             console.warn("[ApplicantsPage] No applicants data or invalid format for all applicants.");
+            setApplicants([]);
             setError("Không có dữ liệu ứng viên hoặc định dạng không hợp lệ.");
           }
         }
@@ -152,43 +215,43 @@ function ApplicantsPage() {
         const errorMsg = err.response?.data?.message || err.message || "Không thể tải dữ liệu ứng viên.";
         console.error("[ApplicantsPage] Error loading data:", errorMsg, err);
         setError(errorMsg);
+        setApplicants([]); // Đảm bảo là mảng rỗng khi lỗi
       } finally {
         console.log("[ApplicantsPage] Data loading process finished. Setting loading to false.");
-        setLoading(false); // Crucial: Ensure loading is set to false in all cases
+        setLoading(false);
       }
     };
 
-    // Only load data if authentication is complete and user is available
     if (!authState.isLoading && authState.isAuthenticated && authState.user?.id) {
       loadData();
     } else if (!authState.isLoading && !authState.isAuthenticated) {
       setError("Vui lòng đăng nhập để xem danh sách ứng viên.");
-      setLoading(false); // Also set loading to false if not authenticated
+      setLoading(false);
     }
-    // If authState.isLoading is true, loading spinner will be shown due to initial state of `loading`
   }, [jobId, authState.isAuthenticated, authState.isLoading, authState.user?.id]);
 
-
-  // --- Các hàm handlers (handleCloseSnackbar, handleStatusChange, v.v...) ---
-  // Giữ nguyên các hàm handlers này như bạn đã có, chúng không ảnh hưởng trực tiếp đến lỗi "loading mãi"
-  // trừ khi một trong số chúng set `loading` thành true và không bao giờ set lại false.
-  // Tuy nhiên, các hàm này thường quản lý state loading riêng của chúng (ví dụ: `updatingStatusId`, `evaluationLoading`).
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === 'clickaway') return;
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // --- CÁC HÀM HANDLER CHO ACTIONS ---
   const handleStatusChange = async (applicationId, newStatus) => {
      if (!applicationId) return;
      setUpdatingStatusId(applicationId);
      try {
+         // Backend cần trả về application đã populate candidateId và jobId
          const response = await apiService.updateApplicationStatusApi(applicationId, { status: newStatus });
          const updatedAppFromServer = response.data?.application;
-         setApplicants(prevApps => prevApps.map(app =>
-             (app._id || app.applicationId) === applicationId ? { ...app, status: updatedAppFromServer.status } : app
-         ));
-         setSnackbar({open: true, message: response.data?.message || 'Cập nhật trạng thái thành công!', severity: 'success'});
+         if (updatedAppFromServer) {
+            setApplicants(prevApps => prevApps.map(app =>
+                (app._id || app.applicationId) === applicationId ? updatedAppFromServer : app
+            ));
+            setSnackbar({open: true, message: response.data?.message || 'Cập nhật trạng thái thành công!', severity: 'success'});
+         } else {
+            throw new Error("Dữ liệu trả về không hợp lệ sau khi cập nhật trạng thái.");
+         }
      } catch(err) {
           const errorMsg = err.response?.data?.message || 'Lỗi! Không thể cập nhật trạng thái.';
           setSnackbar({open: true, message: errorMsg, severity: 'error'});
@@ -197,35 +260,32 @@ function ApplicantsPage() {
      }
   };
 
-  const handleOpenViewProfileDialog = async (candidateId) => {
-    if (!candidateId) {
+  const handleOpenViewProfileDialog = (candidateObject) => { // Truyền cả object candidateId
+    if (!candidateObject || !candidateObject._id) {
         setSnackbar({ open: true, message: 'Không có thông tin ID ứng viên.', severity: 'warning'});
         return;
     }
+    // Không cần fetch lại nếu candidateObject đã đầy đủ thông tin
+    setSelectedCandidateProfile(candidateObject);
     setOpenViewProfileDialog(true);
-    setLoadingProfile(true);
-    try {
-        const appData = applicants.find(app => (app.candidateId?._id || app.candidateId?.id) === candidateId);
-        if (appData && appData.candidateId) {
-            setSelectedCandidateProfile(appData.candidateId);
-        } else {
-            setSnackbar({ open: true, message: 'Không tìm thấy thông tin chi tiết ứng viên.', severity: 'warning'});
-            handleCloseViewProfileDialog();
-        }
-    } catch (err) {
-        setSnackbar({ open: true, message: 'Lỗi! Không thể tải hồ sơ chi tiết.', severity: 'error'});
-        handleCloseViewProfileDialog();
-    }
-    finally { setLoadingProfile(false); }
+    // setLoadingProfile(true) // Chỉ set true nếu bạn fetch lại
+    // try {
+    //     // const appData = applicants.find(app => (app.candidateId?._id || app.candidateId?.id) === candidateId);
+    //     // if (appData && appData.candidateId) {
+    //     //     setSelectedCandidateProfile(appData.candidateId);
+    //     // } else { ... }
+    // } catch (err) { ... }
+    // finally { setLoadingProfile(false); }
   };
   const handleCloseViewProfileDialog = () => {
       setOpenViewProfileDialog(false);
       setTimeout(() => setSelectedCandidateProfile(null), 300);
   };
 
-  const handleOpenInviteDialog = (applicant) => {
-    if (!applicant || !applicant.candidateId) {
-        setSnackbar({ open: true, message: 'Không đủ thông tin ứng viên để mời.', severity: 'warning'});
+  const handleOpenInviteDialog = (applicant) => { // applicant là nguyên object application
+    if (!applicant || !applicant.candidateId?._id) { // Kiểm tra candidateId._id
+        setSnackbar({ open: true, message: 'Không đủ thông tin ứng viên (thiếu ID).', severity: 'warning'});
+        setSelectedApplicantForInvite(null);
         return;
     }
     setSelectedApplicantForInvite(applicant);
@@ -235,86 +295,83 @@ function ApplicantsPage() {
     setOpenInviteDialog(false);
     setTimeout(() => setSelectedApplicantForInvite(null), 300);
   };
-  const handleInviteSubmit = async (inviteDataFromDialog) => {
-    console.log("[ApplicantsPage] handleInviteSubmit called with data:", inviteDataFromDialog);
-    console.log("[ApplicantsPage] Current selectedApplicantForInvite:", selectedApplicantForInvite);
 
+  const handleInviteSubmit = async (dataFromDialog) => {
     if (!selectedApplicantForInvite || !selectedApplicantForInvite._id) {
         setSnackbar({ open: true, message: 'Chưa chọn ứng viên hoặc ứng viên không hợp lệ.', severity: 'error' });
-        return Promise.reject("No valid applicant selected");
+        return Promise.reject(new Error("No valid applicant selected"));
     }
 
-    const appId = selectedApplicantForInvite._id; // Lấy _id từ MongoDB
-    const candidateName = selectedApplicantForInvite.candidateId?.fullName || 'Ứng viên này'; // Lấy tên ứng viên
+    const appId = selectedApplicantForInvite._id;
+    const candidateName = selectedApplicantForInvite.candidateId?.fullName || 'Ứng viên này';
 
-    if (inviteDataFromDialog.inviteType === 'Phỏng vấn') {
-        // Chuẩn bị payload cho API
-        const schedulePayload = {
-            // interviewDate: new Date(inviteDataFromDialog.dateTime).toISOString(), // Chuyển thành ISO string nếu backend cần
-            interviewDate: inviteDataFromDialog.dateTime, // Hoặc để backend tự xử lý datetime-local string
-            interviewType: inviteDataFromDialog.inviteType, // "Phỏng vấn"
-            location: inviteDataFromDialog.location,
-            link: inviteDataFromDialog.link,
-            notes: inviteDataFromDialog.notes
-        };
-        console.log(`[ApplicantsPage] Scheduling interview for app ${appId} with payload:`, schedulePayload);
+    try {
+        let response;
+        let successMessagePrefix = '';
 
-        // Gọi API mới
-        try {
-            // setIsSubmitting(true); // Bạn đang quản lý isSubmitting trong InviteDialog, có thể không cần ở đây
-            const response = await apiService.scheduleInterviewApi(appId, schedulePayload);
-            const updatedAppFromServer = response.data?.application;
-            console.log("[ApplicantsPage] API scheduleInterviewApi response:", response.data);
-
-            if (updatedAppFromServer) {
-                // Cập nhật lại danh sách applicants trên UI
-                setApplicants(prevApps => prevApps.map(app =>
-                    (app._id || app.applicationId) === appId ? { ...app, ...updatedAppFromServer } : app
-                ));
-                setSnackbar({ open: true, message: response.data.message || `Đã lên lịch phỏng vấn cho ${candidateName}.`, severity: 'success' });
-                handleCloseInviteDialog(); // Đóng dialog
-                return Promise.resolve(response.data);
-            } else {
-                throw new Error("Phản hồi từ server không hợp lệ sau khi lên lịch.");
-            }
-
-        } catch (err) {
-            console.error("[ApplicantsPage] Error scheduling interview:", err.response?.data || err.message || err);
-            const errorMsg = err.response?.data?.message || `Lỗi! Không thể lên lịch phỏng vấn cho ${candidateName}.`;
-            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
-            return Promise.reject(err);
-        } finally {
-            // setIsSubmitting(false);
+        if (dataFromDialog.inviteType === 'Phỏng vấn') {
+            successMessagePrefix = 'Đã lên lịch phỏng vấn';
+            const schedulePayload = {
+                interviewDate: dataFromDialog.dateTime,
+                interviewType: dataFromDialog.inviteType,
+                location: dataFromDialog.location,
+                link: dataFromDialog.link,
+                notes: dataFromDialog.notes
+            };
+            response = await apiService.scheduleInterviewApi(appId, schedulePayload);
+        } else if (dataFromDialog.inviteType === 'Test') {
+            successMessagePrefix = 'Đã gửi bài test';
+            const testAssignmentPayload = {
+                testId: dataFromDialog.selectedTestId,
+                deadline: dataFromDialog.testDeadline || undefined,
+                notesForCandidate: dataFromDialog.notesForTest || undefined
+            };
+            response = await apiService.assignTestToApplicantApi(appId, testAssignmentPayload);
+        } else {
+            throw new Error("Loại lời mời không hợp lệ.");
         }
-    } else if (inviteDataFromDialog.inviteType === 'Test') {
-        // Logic gửi test (như hiện tại hoặc bạn sẽ điều chỉnh sau)
-        console.log(`[ApplicantsPage] Sending test for app ${appId}`);
-        try {
-            // Giả sử bạn vẫn cập nhật status khi gửi test
-            await apiService.updateApplicationStatusApi(appId, { status: 'Đã gửi bài test' });
+
+        const updatedAppFromServer = response.data?.application; // Backend phải trả về application đã populate
+
+        if (updatedAppFromServer) {
             setApplicants(prevApps => prevApps.map(app =>
-                (app._id || app.applicationId) === appId ? { ...app, status: 'Đã gửi bài test' } : app
+                (app._id || app.applicationId) === appId ? updatedAppFromServer : app
             ));
-            setSnackbar({ open: true, message: `Đã cập nhật trạng thái "Đã gửi bài test" cho ${candidateName}.`, severity: 'success'});
+            setSnackbar({ open: true, message: response.data.message || `${successMessagePrefix} cho ${candidateName}.`, severity: 'success' });
             handleCloseInviteDialog();
-            return Promise.resolve(true);
-        } catch (err) {
-            console.error("[ApplicantsPage] Error updating status for test:", err.response?.data || err.message || err);
-            const errorMsg = err.response?.data?.message || `Lỗi! Không thể cập nhật trạng thái gửi test.`;
-            setSnackbar({ open: true, message: errorMsg, severity: 'error'});
-            return Promise.reject(err);
+            return Promise.resolve(response.data);
+        } else {
+            throw new Error(`Phản hồi không hợp lệ sau khi ${dataFromDialog.inviteType.toLowerCase()}.`);
         }
+    } catch (err) {
+      // >>> LOG LỖI CHI TIẾT HƠN Ở ĐÂY <<<
+        console.error(`[ApplicantsPage] Error processing invite (Type: ${dataFromDialog.inviteType}):`, err);
+        if (err.response) {
+            // Lỗi từ server (ví dụ: 4xx, 5xx)
+            console.error("[ApplicantsPage] Server responded with error:", err.response.data);
+            console.error("[ApplicantsPage] Status code:", err.response.status);
+        } else if (err.request) {
+            // Request đã được gửi nhưng không nhận được response (lỗi mạng, server không chạy)
+            console.error("[ApplicantsPage] No response received from server:", err.request);
+        } else {
+            // Lỗi xảy ra trong quá trình thiết lập request
+            console.error("[ApplicantsPage] Error setting up request:", err.message);
+        }
+        // >>> KẾT THÚC LOG LỖI CHI TIẾT <<<
+        const errorMsg = err.response?.data?.message || `Lỗi! Không thể ${dataFromDialog.inviteType.toLowerCase()}.`;
+        setSnackbar({ open: true, message: errorMsg, severity: 'error'});
+        return Promise.reject(err);
     }
-};
+  };
 
   const handleOpenEvaluateDialog = (applicant) => {
-    if (!applicant || !applicant.candidateId) {
+    if (!applicant || !applicant.candidateId?._id) {
         setSnackbar({ open: true, message: 'Không đủ thông tin ứng viên để đánh giá.', severity: 'warning'});
         return;
     }
-    setSelectedApplicantForEvaluation({ 
-        ...applicant, 
-        currentEvaluation: applicant.evaluation || null 
+    setSelectedApplicantForEvaluation({
+        ...applicant,
+        currentEvaluation: applicant.evaluation || null
     });
     setOpenEvaluateDialog(true);
   };
@@ -322,17 +379,19 @@ function ApplicantsPage() {
     setOpenEvaluateDialog(false);
     setTimeout(() => setSelectedApplicantForEvaluation(null), 300);
   };
+
   const handleEvaluateSubmit = async (evaluationData) => {
     if (!selectedApplicantForEvaluation || !selectedApplicantForEvaluation._id) return;
     setEvaluationLoading(true);
     const appId = selectedApplicantForEvaluation._id;
     const candidateName = selectedApplicantForEvaluation.candidateId?.fullName || 'Ứng viên';
     try {
+        // Backend cần trả về application đã populate candidateId và jobId
         const response = await apiService.evaluateApplicationApi(appId, evaluationData);
         if (response.data && response.data.application) {
             const updatedAppFromServer = response.data.application;
             setApplicants(prevApps => prevApps.map(app =>
-                app._id === appId ? { ...app, evaluation: updatedAppFromServer.evaluation, status: updatedAppFromServer.status } : app
+                app._id === appId ? updatedAppFromServer : app
             ));
             setSnackbar({ open: true, message: response.data.message || `Đã lưu đánh giá cho ${candidateName}.`, severity: 'success'});
             handleCloseEvaluateDialog();
@@ -349,7 +408,11 @@ function ApplicantsPage() {
 
   const handleViewCV = (cvRelativeUrl, cvFileName) => {
     if (cvRelativeUrl && cvRelativeUrl !== '#') {
-        const fullCvUrl = cvRelativeUrl.startsWith('http') ? cvRelativeUrl : `${API_DOMAIN}${cvRelativeUrl}`;
+        // Giả sử cvRelativeUrl đã là đường dẫn đầy đủ hoặc apiClient đã cấu hình baseURL
+        // Nếu cvRelativeUrl là đường dẫn tương đối từ domain API, ví dụ: /uploads/cvs/file.pdf
+        // và API_DOMAIN của bạn là http://localhost:5001
+        // thì fullCvUrl sẽ là http://localhost:5001/uploads/cvs/file.pdf
+        const fullCvUrl = cvRelativeUrl.startsWith('http') ? cvRelativeUrl : `${import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5001'}${cvRelativeUrl}`;
         window.open(fullCvUrl, '_blank', 'noopener,noreferrer');
     } else {
         setSnackbar({open: true, message: `Không thể mở CV: ${cvFileName || 'Không có link'}.`, severity: 'warning'});
@@ -366,121 +429,85 @@ function ApplicantsPage() {
     setTimeout(() => setSelectedApplicantForCoverLetter(null), 300);
   };
 
-  const handleOpenSendTestDialog = (applicant) => {
-    if (!jobId || jobAssociatedTests.length === 0) {
-        setSnackbar({ open: true, message: 'Chức năng gửi test chỉ khả dụng khi xem ứng viên của một vị trí cụ thể đã được gán bài test.', severity: 'info' });
-        return;
-    }
-    if (!applicant || !applicant.candidateId) {
-        setSnackbar({ open: true, message: 'Không đủ thông tin ứng viên để gửi test.', severity: 'warning'});
-        return;
-    }
-    setSelectedApplicantForTest(applicant);
-    setSelectedTestToSend(jobAssociatedTests[0]?._id || jobAssociatedTests[0]?.testId || '');
-    setOpenSendTestDialog(true);
-  };
-  const handleCloseSendTestDialog = () => {
-    setOpenSendTestDialog(false);
-    setTimeout(() => { setSelectedApplicantForTest(null); setSelectedTestToSend(''); }, 300);
-  };
-  const handleSelectTestRadioChange = (event) => { setSelectedTestToSend(event.target.value); };
-  const handleSendTestSubmit = async () => {
-    if (!selectedTestToSend || !selectedApplicantForTest || !selectedApplicantForTest.candidateId) return;
-    const selectedTestObject = jobAssociatedTests.find(t => (t._id || t.testId) === selectedTestToSend);
-    if (!selectedTestObject) {
-        setSnackbar({ open: true, message: 'Lỗi: Bài test đã chọn không hợp lệ.', severity: 'error'});
-        return;
-    }
-    const appId = selectedApplicantForTest._id || selectedApplicantForTest.applicationId;
-    const candidateName = selectedApplicantForTest.candidateId.fullName;
+  // Bỏ các hàm liên quan đến SendTestDialog riêng biệt vì đã gộp vào InviteDialog
+  // const handleOpenSendTestDialog = (...) => { ... };
+  // const handleCloseSendTestDialog = (...) => { ... };
+  // const handleSelectTestRadioChange = (...) => { ... };
+  // const handleSendTestSubmit = (...) => { ... };
 
-    setSendingTest(true);
-    try {
-        console.warn("handleSendTestSubmit: Cần API để gửi bài test cho ứng viên.");
-        await new Promise(resolve => setTimeout(resolve, 1000)); 
-        handleStatusChange(appId, 'Đã gửi bài test');
-        setSnackbar({ open: true, message: `Đã gửi bài test "${selectedTestObject.name}" cho ${candidateName}.`, severity: 'success'});
-        handleCloseSendTestDialog();
-    } catch (err) {
-        setSnackbar({ open: true, message: `Lỗi! Không thể gửi bài test. (${err.message || ''})`, severity: 'error'});
-    } finally {
-        setSendingTest(false);
-    }
-  };
-  // --- Kết thúc các hàm handlers ---
 
   const renderPageTitle = () => {
     if (jobId && jobDetailsForTitle) {
       return (
-        <Typography variant="h5" gutterBottom sx={{ mb: 1 }}>
-          Ứng viên cho vị trí: <Link component={RouterLink} to={`/jobs/${jobId}`} underline="hover">{jobDetailsForTitle.title}</Link>
+        <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 2 }}> {/* component="h1" cho ngữ nghĩa */}
+          Ứng viên cho vị trí: <Link component={RouterLink} to={`/jobs/${jobId}`} underline="hover" sx={{fontWeight: 600, color: 'primary.main'}}>{jobDetailsForTitle.title}</Link>
         </Typography>
       );
     }
     if (!jobId) {
-        return <Typography variant="h5" gutterBottom sx={{ mb: 1 }}>Tất cả ứng viên</Typography>;
+        return <Typography variant="h5" component="h1" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>Tất cả ứng viên</Typography>;
     }
-    // Nếu đang loading ban đầu hoặc có lỗi khi có jobId, không hiển thị tiêu đề này vội
-    // (LoadingSpinner hoặc Alert sẽ được hiển thị bởi logic render chính)
-    return null; 
+    return null;
   };
 
-  // --- Phần Render chính ---
-  if (loading) { // Hiển thị spinner nếu loading là true
+  if (loading || authState.isLoading) { // Thêm kiểm tra authState.isLoading
     return <LoadingSpinner />;
   }
 
-  if (error) { // Hiển thị lỗi nếu có lỗi và không còn loading
+  if (error) {
     return (
-        <Box>
-            {renderPageTitle()} {/* Vẫn hiển thị tiêu đề nếu có thể */}
-            <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        <Box sx={{p:2}}>
+            {renderPageTitle()}
+            <Alert severity="error" sx={{ mb: 2, p:2, borderRadius: '8px' }}>{error}</Alert>
+            {jobId && <Button onClick={() => navigate('/employer/manage-jobs')}>Quay lại Quản lý Tin đăng</Button>}
         </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{p: {xs: 1, sm: 2}}}> {/* Responsive padding */}
       {renderPageTitle()}
-      {!jobId && ( // Chỉ hiển thị mô tả này khi xem tất cả ứng viên
-        <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
+      {!jobId && (
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 2.5 }}> {/* Tăng mb */}
           Danh sách tất cả ứng viên đã ứng tuyển vào các vị trí của bạn.
         </Typography>
       )}
 
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{boxShadow: 3, borderRadius: 2}}> {/* Thêm style cho TableContainer */}
         <Table sx={{ minWidth: 750 }} aria-label="Applicants table">
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+          <TableHead sx={{ backgroundColor: (theme) => theme.palette.grey[100] }}> {/* Màu nền nhẹ hơn */}
             <TableRow>
-              <TableCell sx={{width: '20%'}}>Ứng viên</TableCell>
+              <TableCell sx={{width: '20%', fontWeight: 'bold'}}>Ứng viên</TableCell>
               {!jobId && (
-                <TableCell sx={{width: '20%'}}>Vị trí ứng tuyển</TableCell>
+                <TableCell sx={{width: '20%', fontWeight: 'bold'}}>Vị trí ứng tuyển</TableCell>
               )}
-              <TableCell sx={{width: jobId ? '15%' : '10%'}}>Ngày ứng tuyển</TableCell>
-              <TableCell align="center" sx={{width: jobId ? '20%' : '15%'}}>Trạng thái</TableCell>
-              <TableCell align="center" sx={{width: '10%'}}>CV</TableCell>
-              <TableCell align="center" sx={{width: jobId ? '30%' : '25%'}}>Hành động</TableCell>
+              <TableCell sx={{width: jobId ? '15%' : '12%', fontWeight: 'bold'}}>Ngày ứng tuyển</TableCell>
+              <TableCell align="center" sx={{width: jobId ? '18%' : '15%', fontWeight: 'bold'}}>Trạng thái</TableCell>
+              <TableCell align="center" sx={{width: '8%', fontWeight: 'bold'}}>CV</TableCell>
+              <TableCell align="center" sx={{width: jobId ? '27%' : '25%', fontWeight: 'bold'}}>Hành động</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {applicants.length > 0 ? (
               applicants.map((app) => {
                   const currentAppId = app._id || app.applicationId;
-                  const candidateInfo = app.candidateId;
-                  const jobInfoForApplicant = app.jobId;
+                  const candidateInfo = app.candidateId; // Đây nên là object đã populate
+                  const jobInfoForApplicant = app.jobId; // Đây nên là object đã populate
                   const isCurrentActionLoading = updatingStatusId === currentAppId;
 
                   return (
-                      <TableRow key={currentAppId} hover>
+                      <TableRow key={currentAppId} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                           <TableCell component="th" scope="row">
-                              {candidateInfo?.fullName || 'N/A'}
+                              <Typography variant="subtitle2" fontWeight="500" color="primary.dark">
+                                {candidateInfo?.fullName || 'N/A'}
+                              </Typography>
                               {candidateInfo?.email && <Typography variant="caption" display="block" color="text.secondary">{candidateInfo.email}</Typography>}
                           </TableCell>
 
                           {!jobId && (
                               <TableCell>
                                 {jobInfoForApplicant ? (
-                                  <Link component={RouterLink} to={`/jobs/${jobInfoForApplicant._id}`} underline="hover">
+                                  <Link component={RouterLink} to={`/jobs/${jobInfoForApplicant._id}`} underline="hover" sx={{fontWeight: 500}}>
                                     {jobInfoForApplicant.title}
                                   </Link>
                                 ) : ('N/A')}
@@ -490,17 +517,17 @@ function ApplicantsPage() {
 
                           <TableCell>{formatShortDateTime(app.createdAt)}</TableCell>
                           <TableCell align="center">
-                              <FormControl variant="standard" size="small" sx={{ minWidth: 140 }}>
+                              <FormControl variant="outlined" size="small" sx={{ minWidth: 150, '& .MuiOutlinedInput-input': { py: '6.5px' } }}> {/* Sử dụng outlined và custom padding */}
                                   <Select
                                       value={app.status}
                                       onChange={(e) => handleStatusChange(currentAppId, e.target.value)}
                                       disabled={isCurrentActionLoading}
                                       renderValue={(selectedValue) => (
                                           isCurrentActionLoading ?
-                                          <CircularProgress size={20} sx={{mx: 'auto', display:'block'}}/> :
+                                          <CircularProgress size={18} sx={{mx: 'auto', display:'block'}}/> :
                                           <Chip label={selectedValue} color={getApplicantStatusColor(selectedValue)} size="small" sx={{width: '100%'}} />
                                       )}
-                                      sx={{ '.MuiSelect-select': { p: 0.5, fontSize: '0.875rem' } , '.MuiSelect-select:focus': { backgroundColor: 'transparent' } }}
+                                      sx={{ borderRadius: '8px', '.MuiSelect-select': { p: '8px 12px', fontSize: '0.875rem' } , '.MuiSelect-select:focus': { backgroundColor: 'transparent' } }}
                                   >
                                       {applicantStatuses.map(statusOption => (
                                           <MenuItem key={statusOption} value={statusOption}>
@@ -520,9 +547,9 @@ function ApplicantsPage() {
                                </Tooltip>
                            </TableCell>
                           <TableCell align="center">
-                              <Stack direction="row" spacing={0.2} justifyContent="center" flexWrap="wrap">
+                              <Stack direction="row" spacing={0.1} justifyContent="center" flexWrap="wrap"> {/* Giảm spacing */}
                                   <Tooltip title="Xem hồ sơ">
-                                      <IconButton size="small" onClick={() => handleOpenViewProfileDialog(candidateInfo?._id)} disabled={!candidateInfo || isCurrentActionLoading} >
+                                      <IconButton size="small" onClick={() => handleOpenViewProfileDialog(candidateInfo)} disabled={!candidateInfo?._id || isCurrentActionLoading} >
                                           <VisibilityIcon fontSize='small'/>
                                       </IconButton>
                                   </Tooltip>
@@ -538,24 +565,16 @@ function ApplicantsPage() {
                                           </IconButton>
                                       </span>
                                   </Tooltip>
-                                  {jobId && jobAssociatedTests.length > 0 && (
-                                      <Tooltip title="Gửi bài test">
-                                          <span>
-                                              <IconButton size="small" color="secondary" onClick={() => handleOpenSendTestDialog(app)} disabled={isCurrentActionLoading} >
-                                                  <AssignmentIcon fontSize='small'/>
-                                              </IconButton>
-                                          </span>
-                                      </Tooltip>
-                                  )}
-                                  <Tooltip title={`Đánh giá ${candidateInfo?.fullName || 'Ứng viên'}`}>
-                                    <IconButton size="small" sx={{color: '#673ab7'}} onClick={() => handleOpenEvaluateDialog(app)} disabled={isCurrentActionLoading}>
-                                       <RateReviewIcon fontSize='small'/>
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title={`Mời ${candidateInfo?.fullName || 'Ứng viên'}`}>
-                                      <IconButton size="small" color="primary" onClick={() => handleOpenInviteDialog(app)} disabled={isCurrentActionLoading} >
+                                  {/* Nút Gửi Lời Mời (chung cho Phỏng vấn/Test) */}
+                                  <Tooltip title={`Mời / Gửi bài test cho ${candidateInfo?.fullName || 'Ứng viên'}`}>
+                                      <IconButton size="small" color="primary" onClick={() => handleOpenInviteDialog(app)} disabled={isCurrentActionLoading}>
                                           <MailOutlineIcon fontSize='small'/>
                                       </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title={`Đánh giá ${candidateInfo?.fullName || 'Ứng viên'}`}>
+                                    <IconButton size="small" sx={{color: (theme) => theme.palette.secondary.main }} onClick={() => handleOpenEvaluateDialog(app)} disabled={isCurrentActionLoading}>
+                                       <RateReviewIcon fontSize='small'/>
+                                    </IconButton>
                                   </Tooltip>
                               </Stack>
                           </TableCell>
@@ -564,8 +583,10 @@ function ApplicantsPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={jobId ? 5 : 6} align="center">
-                  {jobId ? 'Chưa có ứng viên nào cho vị trí này.' : 'Chưa có ứng viên nào ứng tuyển vào các vị trí của bạn.'}
+                <TableCell colSpan={jobId ? 5 : 6} align="center" sx={{py:3}}>
+                  <Typography color="text.secondary">
+                    {jobId ? 'Chưa có ứng viên nào cho vị trí này.' : 'Chưa có ứng viên nào ứng tuyển vào các vị trí của bạn.'}
+                  </Typography>
                 </TableCell>
               </TableRow>
             )}
@@ -579,25 +600,27 @@ function ApplicantsPage() {
             open={openViewProfileDialog}
             onClose={handleCloseViewProfileDialog}
             candidateData={selectedCandidateProfile}
-            loading={loadingProfile}
+            loading={loadingProfile} // Nên là loadingProfile, không phải loading chung của trang
        />
       )}
-      {selectedApplicantForInvite && selectedApplicantForInvite.candidateId && (
+      {selectedApplicantForInvite && ( // Kiểm tra selectedApplicantForInvite thay vì selectedApplicantForInvite.candidateId
         <InviteDialog
             open={openInviteDialog}
             onClose={handleCloseInviteDialog}
             onSubmit={handleInviteSubmit}
-            applicantName={selectedApplicantForInvite.candidateId.fullName}
+            applicantName={selectedApplicantForInvite.candidateId?.fullName}
+            availableTests={availableTests}
+            loadingTests={loadingTests}
         />
       )}
-      {selectedApplicantForEvaluation && selectedApplicantForEvaluation.candidateId && (
+      {selectedApplicantForEvaluation && ( // Kiểm tra selectedApplicantForEvaluation
         <EvaluateApplicantDialog
             open={openEvaluateDialog}
             onClose={handleCloseEvaluateDialog}
             onSubmit={handleEvaluateSubmit}
-            applicantName={selectedApplicantForEvaluation.candidateId.fullName}
+            applicantName={selectedApplicantForEvaluation.candidateId?.fullName}
             currentEvaluation={selectedApplicantForEvaluation.currentEvaluation}
-            loading={evaluationLoading}
+            loading={evaluationLoading} // Loading riêng cho dialog đánh giá
         />
       )}
       {selectedApplicantForCoverLetter && (
@@ -608,49 +631,15 @@ function ApplicantsPage() {
             coverLetterContent={selectedApplicantForCoverLetter.coverLetter}
         />
       )}
-      {jobId && selectedApplicantForTest && selectedApplicantForTest.candidateId && (
-        <Dialog open={openSendTestDialog} onClose={handleCloseSendTestDialog} maxWidth="xs" fullWidth>
-            <DialogTitle>Gửi bài test cho {selectedApplicantForTest.candidateId.fullName}</DialogTitle>
-            <DialogContent>
-                {jobAssociatedTests.length === 0 ? ( <Typography color="text.secondary" sx={{mt: 2}}>Công việc này chưa được gán bài test nào.</Typography> )
-                : (
-                    <FormControl component="fieldset" sx={{mt: 1, width: '100%'}}>
-                        <FormLabel component="legend">Chọn bài test để gửi:</FormLabel>
-                        <RadioGroup value={selectedTestToSend} onChange={handleSelectTestRadioChange} >
-                            {jobAssociatedTests.map((test) => (
-                                <FormControlLabel
-                                    key={test.testId || test._id}
-                                    value={test.testId || test._id}
-                                    control={<Radio size="small"/>}
-                                    label={
-                                        <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
-                                            {test.name}
-                                            {test.link && (
-                                                <Tooltip title={`Mở link test: ${test.link}`} sx={{ml: 0.5}}>
-                                                    <Link href={test.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                                                        <LinkIcon sx={{fontSize: '1rem', verticalAlign:'middle', color:'text.secondary'}}/>
-                                                    </Link>
-                                                </Tooltip>
-                                            )}
-                                        </Box>
-                                    }
-                                />
-                            ))}
-                        </RadioGroup>
-                    </FormControl>
-                )}
-            </DialogContent>
-            <DialogActions sx={{pb: 2, pr: 2}}>
-                <Button onClick={handleCloseSendTestDialog} color="inherit" disabled={sendingTest}>Hủy</Button>
-                <Button onClick={handleSendTestSubmit} variant="contained" disabled={!selectedTestToSend || sendingTest || jobAssociatedTests.length === 0} startIcon={sendingTest ? <CircularProgress size={16} color="inherit"/> : null} >
-                    Gửi
-                </Button>
-            </DialogActions>
-        </Dialog>
-      )}
+      {/* Bỏ SendTestDialog riêng biệt vì đã gộp vào InviteDialog */}
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar}>
-          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} variant="filled" sx={{ width: '100%', boxShadow: 6, borderRadius: '8px' }}>
               {snackbar.message}
           </Alert>
       </Snackbar>

@@ -45,6 +45,7 @@ const applicationSchema = new mongoose.Schema({
         'Mời phỏng vấn',  // Invited for interview
         'Trúng tuyển',     // Offer extended
         'Từ chối',       // Rejected by employer or candidate declined offer
+        'Đã gửi bài test'
         // Bỏ bớt các trạng thái trung gian nếu không quá cần thiết cho giai đoạn này
     ],
     default: 'Đã nộp'
@@ -74,7 +75,15 @@ const applicationSchema = new mongoose.Schema({
         evaluationDate: { // Ngày đánh giá
             type: Date
         }
-    },// Có thể thêm các trường về lịch sử thay đổi status, notes của employer,... sau
+    },
+    assignedTestDetails: {
+        testId: { type: mongoose.Schema.Types.ObjectId, ref: 'Test' },
+        testName: { type: String }, // Phải có
+        testLink: { type: String }, // Phải có
+        sentDate: { type: Date, default: Date.now },
+        deadline: { type: Date }, // Kiểu Date, có thể là undefined
+        notesForCandidate: { type: String, trim: true } // Có thể là undefined
+    }// Có thể thêm các trường về lịch sử thay đổi status, notes của employer,... sau
     // employerNotes: [{ note: String, date: Date, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User'} }],
 
 }, {

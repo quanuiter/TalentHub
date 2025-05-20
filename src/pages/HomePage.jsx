@@ -1,7 +1,7 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react" // Added useCallback
 import { Link as RouterLink, useNavigate } from "react-router-dom"
+
+// MUI Components
 import Typography from "@mui/material/Typography"
 import Box from "@mui/material/Box"
 import Grid from "@mui/material/Grid"
@@ -11,63 +11,73 @@ import Autocomplete from "@mui/material/Autocomplete"
 import Paper from "@mui/material/Paper"
 import Chip from "@mui/material/Chip"
 import Container from "@mui/material/Container"
-import { alpha } from "@mui/material/styles"
+import { alpha, useTheme } from "@mui/material/styles" // Added useTheme
 import Card from "@mui/material/Card"
 import CardContent from "@mui/material/CardContent"
 import Divider from "@mui/material/Divider"
-import SearchIcon from "@mui/icons-material/Search"
-import LocationOnIcon from "@mui/icons-material/LocationOn"
-import WorkIcon from "@mui/icons-material/Work"
-import BusinessIcon from "@mui/icons-material/Business"
 import InputAdornment from "@mui/material/InputAdornment"
+import Alert from "@mui/material/Alert" // Added Alert
 
+// Icons
+import SearchIcon from "@mui/icons-material/Search"
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined" // Using Outlined
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined" // Using Outlined
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined" // Using Outlined
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'; // Icon for categories
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+
+// Custom Components
 import JobCard from "../components/jobs/JobCard"
-import CompanyCard from "../components/companies/companyCard"
-import apiService from "../services/api"; 
+import CompanyCard from "../components/companies/CompanyCard" // Corrected import name
+import apiService from "../services/api"
 import LoadingSpinner from "../components/ui/LoadingSpinner"
 
-// Dữ liệu giả lập cho bộ lọc nhanh
+// Mock data for filter options (can be moved to a constants file)
 const popularCategories = [
   { label: "CNTT - Phần mềm", value: "it-software" },
-  { label: "Marketing", value: "marketing" },
-  { label: "Bán hàng", value: "sales" },
-  { label: "Thiết kế", value: "design" },
-  { label: "Nhân sự", value: "hr" },
+  { label: "Marketing & Truyền thông", value: "marketing" },
+  { label: "Bán hàng & Kinh doanh", value: "sales" },
+  { label: "Thiết kế & Sáng tạo", value: "design" },
+  { label: "Nhân sự & Tuyển dụng", value: "hr" },
+  { label: "Kế toán & Tài chính", value: "accounting"},
 ]
-const popularLocations = ["TP. Hồ Chí Minh", "Hà Nội", "Đà Nẵng", "Remote"]
+const popularLocations = ["TP. Hồ Chí Minh", "Hà Nội", "Đà Nẵng", "Remote", "Toàn quốc"]
 
 function HomePage() {
   const navigate = useNavigate()
-  const [errorCompanies, setErrorCompanies] = useState(null);
-  const [errorJobs, setErrorJobs] = useState(null);
+  const theme = useTheme() // Initialize theme
+
   const [featuredJobs, setFeaturedJobs] = useState([])
   const [featuredCompanies, setFeaturedCompanies] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(true)
   const [loadingCompanies, setLoadingCompanies] = useState(true)
+  const [errorJobs, setErrorJobs] = useState(null)
+  const [errorCompanies, setErrorCompanies] = useState(null)
 
-  // State cho thanh tìm kiếm
   const [searchKeyword, setSearchKeyword] = useState("")
-  const [searchLocation, setSearchLocation] = useState(null)
+  const [searchLocation, setSearchLocation] = useState(null) // Autocomplete can be null
 
-  // Load jobs và companies
   useEffect(() => {
     const loadData = async () => {
-      setLoadingJobs(true);
-      setLoadingCompanies(true);
-      setErrorJobs(null);
-      setErrorCompanies(null);
+      setLoadingJobs(true)
+      setLoadingCompanies(true)
+      setErrorJobs(null)
+      setErrorCompanies(null)
 
+      // --- Load Featured Jobs (Latest Jobs) ---
       try {
-        // Gọi API để lấy jobs
-        const jobsResponse = await apiService.getPublicJobs(); // Giả sử lấy 6 job mới nhất ở backend hoặc lọc ở đây
-        if (jobsResponse && Array.isArray(jobsResponse.data)) {
-          // Sắp xếp theo createdAt (ngày tạo) mới nhất nếu backend chưa làm
-          // Và lấy 6 jobs đầu tiên
-          const sortedJobs = jobsResponse.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          setFeaturedJobs(sortedJobs.slice(0, 4));
+        // Request specific number of latest jobs
+        const jobsResponse = await apiService.getPublicJobs({ limit: 6, sort: '-createdAt' });
+        
+        // Correctly access the jobs array from response.data.data
+        if (jobsResponse && jobsResponse.data && Array.isArray(jobsResponse.data.data)) {
+          setFeaturedJobs(jobsResponse.data.data); // API already sorted and limited
         } else {
+          // Handle unexpected structure or empty data case
+          console.warn("Unexpected jobsResponse structure or no data:", jobsResponse);
           setFeaturedJobs([]);
-          setErrorJobs("Không thể tải danh sách việc làm nổi bật.");
+          // Consider a more specific error if jobsResponse.data exists but jobsResponse.data.data is not an array
+          setErrorJobs("Không thể tải danh sách việc làm nổi bật hoặc định dạng dữ liệu không đúng.");
         }
       } catch (error) {
         console.error("Lỗi tải jobs trang chủ:", error);
@@ -77,15 +87,24 @@ function HomePage() {
         setLoadingJobs(false);
       }
 
+      // --- Load Featured Companies ---
       try {
-        // Gọi API để lấy companies
-        const companiesResponse = await apiService.getPublicCompaniesApi(); // Giả sử lấy 6 công ty hoặc lọc ở đây
-        if (companiesResponse && Array.isArray(companiesResponse.data)) {
-          // Lấy 6 công ty đầu tiên (backend có thể đã sắp xếp theo tiêu chí nổi bật)
-          setFeaturedCompanies(companiesResponse.data.slice(0, 4));
-        } else {
+        // Assuming getPublicCompaniesApi also returns a similar structure or direct array
+        // If it returns { data: { data: companiesArray } }, similar change is needed.
+        // For now, assuming it might return a direct array or { data: companiesArray }
+        const companiesResponse = await apiService.getPublicCompaniesApi({ limit: 6 }); // Example: limit companies
+        
+        if (companiesResponse && companiesResponse.data && Array.isArray(companiesResponse.data.data)) {
+          // If response is { data: { data: [...] } }
+          setFeaturedCompanies(companiesResponse.data.data);
+        } else if (companiesResponse && Array.isArray(companiesResponse.data)) {
+          // If response is { data: [...] } or a direct array from a non-axios raw fetch
+           setFeaturedCompanies(companiesResponse.data.slice(0, 6));
+        }
+        else {
+          console.warn("Unexpected companiesResponse structure or no data:", companiesResponse);
           setFeaturedCompanies([]);
-          setErrorCompanies("Không thể tải danh sách công ty nổi bật.");
+          setErrorCompanies("Không thể tải danh sách công ty nổi bật hoặc định dạng dữ liệu không đúng.");
         }
       } catch (error) {
         console.error("Lỗi tải companies trang chủ:", error);
@@ -94,390 +113,274 @@ function HomePage() {
       } finally {
         setLoadingCompanies(false);
       }
-    };
-    loadData();
-  }, []);
+    }
+    loadData()
+  }, [])
 
-  // Xử lý tìm kiếm
   const handleSearch = (event) => {
     event.preventDefault()
-    const keywordQuery = searchKeyword ? `keyword=${encodeURIComponent(searchKeyword)}` : ""
-    const locationQuery = searchLocation ? `location=${encodeURIComponent(searchLocation)}` : ""
-    const queryParams = [keywordQuery, locationQuery].filter(Boolean).join("&")
-    console.log("Navigating to:", `/jobs?${queryParams}`)
-    navigate(`/jobs?${queryParams}`)
+    const queryParams = new URLSearchParams();
+    if (searchKeyword) queryParams.set("keyword", searchKeyword);
+    if (searchLocation) queryParams.set("location", searchLocation);
+    navigate(`/jobs?${queryParams.toString()}`)
   }
+
+  const SectionHeader = ({ icon, title, onViewAllLink }) => (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        mb: 3,
+        pb: 1,
+        borderBottom: `2px solid ${theme.palette.primary.main}`,
+      }}
+    >
+      <Typography
+        variant="h5"
+        component="h2"
+        fontWeight="600"
+        color="text.primary"
+        sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
+      >
+        {icon} {title}
+      </Typography>
+      {onViewAllLink && (
+        <Button
+          variant="text"
+          component={RouterLink}
+          to={onViewAllLink}
+          size="small"
+          endIcon={<ArrowForwardIcon />}
+          sx={{
+            fontWeight: 500,
+            color: 'primary.main',
+            textTransform: 'none',
+            '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.05) }
+          }}
+        >
+          Xem tất cả
+        </Button>
+      )}
+    </Box>
+  );
 
   return (
     <Box
       sx={{
-        bgcolor: "#f8f9fa",
+        bgcolor: theme.palette.grey[50],
         minHeight: "100vh",
-        pt: 2,
-        pb: 8,
+        pt: {xs: 2, md: 0}, 
+        pb: 6,
       }}
     >
-      <Container maxWidth="lg">
-        {/* === Hero Section === */}
-        <Paper
-          elevation={3}
+      {/* === Hero Section === */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 3, sm: 5, md: 8 }, 
+          mb: {xs: 4, md: 6},
+          textAlign: "center",
+          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+          color: "white",
+          borderRadius: {xs: 0, md: '24px'},
+          position: "relative",
+          overflow: "hidden",
+          mt: {xs:0, md: -8} 
+        }}
+      >
+        <Box 
           sx={{
-            p: { xs: 3, md: 6 },
-            mb: 5,
-            textAlign: "center",
-            background: "linear-gradient(135deg, #1976d2 0%, #0d47a1 100%)",
-            color: "white",
-            borderRadius: 3,
-            position: "relative",
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.1)",
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            opacity: 0.07,
+            backgroundImage: 'url("https://images.unsplash.com/photo-1522071820081-009f0129c7da?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1770&q=80")',
+            backgroundSize: "cover", backgroundPosition: "center", zIndex: 0,
           }}
-        >
-          <Box
+        />
+        <Container maxWidth="md" sx={{ position: "relative", zIndex: 1, pt: {xs:2, md:8}, pb: {xs:3, md:6} }}>
+          <Typography
+            variant="h2"
+            component="h1"
+            fontWeight="bold"
+            gutterBottom
             sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              opacity: 0.1,
-              backgroundImage:
-                'url("https://images.unsplash.com/photo-1497215842964-222b430dc094?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80")',
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              zIndex: 0,
-            }}
-          />
-
-          <Box sx={{ position: "relative", zIndex: 1 }}>
-            <Typography
-              variant="h3"
-              component="h1"
-              fontWeight="bold"
-              gutterBottom
-              sx={{
-                fontSize: { xs: "1.8rem", sm: "2.2rem", md: "2.8rem" },
-                textShadow: "0 2px 4px rgba(0,0,0,0.2)",
-              }}
-            >
-              Kết Nối Tài Năng - Kiến Tạo Tương Lai
-            </Typography>
-
-            <Typography
-              variant="h6"
-              component="p"
-              sx={{
-                mb: 4,
-                opacity: 0.9,
-                maxWidth: "800px",
-                mx: "auto",
-                fontSize: { xs: "1rem", md: "1.2rem" },
-              }}
-            >
-              Khám phá hàng ngàn cơ hội việc làm từ các công ty hàng đầu tại Việt Nam.
-            </Typography>
-
-            <Card
-              elevation={4}
-              sx={{
-                maxWidth: "800px",
-                mx: "auto",
-                borderRadius: 2,
-                background: alpha("#fff", 0.95),
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                <Box
-                  component="form"
-                  onSubmit={handleSearch}
-                  sx={{
-                    display: "flex",
-                    flexDirection: { xs: "column", sm: "row" },
-                    gap: 2,
-                  }}
-                >
-                  <TextField
-                    variant="outlined"
-                    placeholder="Nhập chức danh, kỹ năng, công ty..."
-                    fullWidth
-                    value={searchKeyword}
-                    onChange={(e) => setSearchKeyword(e.target.value)}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{ flexGrow: 2 }}
-                  />
-
-                  <Autocomplete
-                    options={popularLocations}
-                    value={searchLocation}
-                    onChange={(event, newValue) => {
-                      setSearchLocation(newValue)
-                    }}
-                    freeSolo
-                    fullWidth
-                    sx={{ flexGrow: 1 }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        placeholder="Địa điểm"
-                        variant="outlined"
-                        InputProps={{
-                          ...params.InputProps,
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <LocationOnIcon color="primary" />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    )}
-                  />
-
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    type="submit"
-                    sx={{
-                      px: 3,
-                      py: { xs: 1.5, sm: "auto" },
-                      height: { sm: "56px" },
-                      minWidth: { xs: "100%", sm: "120px" },
-                      fontWeight: "bold",
-                      fontSize: "1rem",
-                    }}
-                  >
-                    Tìm kiếm
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          </Box>
-        </Paper>
-
-        {/* === Quick Browse by Category === */}
-        <Card
-          elevation={2}
-          sx={{
-            my: 5,
-            p: 3,
-            borderRadius: 2,
-            background: "white",
-          }}
-        >
-          <Box sx={{ textAlign: "center", mb: 3 }}>
-            <Typography
-              variant="h5"
-              component="h2"
-              fontWeight="medium"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 1,
-              }}
-            >
-              <WorkIcon color="primary" /> Tìm việc theo ngành nghề
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              gap: 1.5,
+              fontSize: { xs: "2rem", sm: "2rem", md: "2.5rem" },
+              textShadow: "0 2px 5px rgba(0,0,0,0.25)",
+              mb: 2,
             }}
           >
+            Kết Nối Tài Năng - Kiến Tạo Tương Lai
+          </Typography>
+          <Typography
+            variant="h6"
+            component="p"
+            sx={{
+              mb: 4, opacity: 0.9, maxWidth: "700px", mx: "auto",
+              fontSize: { xs: "1rem", md: "1.25rem" },
+              lineHeight: 1.6,
+            }}
+          >
+            Khám phá hàng ngàn cơ hội việc làm từ các công ty hàng đầu. Tìm kiếm, ứng tuyển và xây dựng sự nghiệp mơ ước của bạn ngay hôm nay!
+          </Typography>
+          <Paper 
+            elevation={6}
+            sx={{
+              maxWidth: "750px", mx: "auto", borderRadius: "12px", 
+              p: 0.5, 
+              background: alpha(theme.palette.background.paper, 0.15),
+              backdropFilter: "blur(10px)",
+              border: `1px solid ${alpha(theme.palette.common.white, 0.2)}`
+            }}
+          >
+            <Box
+              component="form"
+              onSubmit={handleSearch}
+              sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: {xs: 1.5, sm: 1}, p: {xs: 1.5, sm: 1} }}
+            >
+              <TextField
+                variant="outlined"
+                placeholder="Chức danh, kỹ năng, công ty..."
+                fullWidth
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                InputProps={{
+                  startAdornment: ( <InputAdornment position="start"><SearchIcon sx={{color: alpha(theme.palette.common.white, 0.7)}} /></InputAdornment>),
+                  sx: {
+                    borderRadius: "8px",
+                    bgcolor: alpha(theme.palette.common.black, 0.2),
+                    color: 'white',
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.common.white, 0.3) },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.common.white, 0.5) },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.common.white, borderWidth: '1px' },
+                    '& input::placeholder': { color: alpha(theme.palette.common.white, 0.5) },
+                  }
+                }}
+                sx={{ flexGrow: 2 }}
+              />
+              <Autocomplete
+                options={popularLocations}
+                value={searchLocation}
+                onChange={(event, newValue) => setSearchLocation(newValue)}
+                freeSolo
+                fullWidth
+                popupIcon={<LocationOnOutlinedIcon sx={{color: alpha(theme.palette.common.white, 0.7)}}/>}
+                sx={{ flexGrow: 1 }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="Địa điểm"
+                    variant="outlined"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: ( <InputAdornment position="start"><LocationOnOutlinedIcon sx={{color: alpha(theme.palette.common.white, 0.7)}} /></InputAdornment>),
+                        sx: {
+                        borderRadius: "8px",
+                        bgcolor: alpha(theme.palette.common.black, 0.2),
+                        color: 'white',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.common.white, 0.3) },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.common.white, 0.5) },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.common.white, borderWidth: '1px' },
+                        '& input::placeholder': { color: alpha(theme.palette.common.white, 0.5) },
+                      }
+                    }}
+                  />
+                )}
+                PaperComponent={(props) => <Paper elevation={4} {...props} />}
+              />
+              <Button
+                variant="contained"
+                color="secondary" 
+                type="submit"
+                size="large"
+                sx={{
+                  px: {xs:2, sm:3}, fontWeight: "bold", fontSize: "1rem", borderRadius: "8px",
+                  minWidth: { xs: "100%", sm: "130px" },
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    '&:hover': { bgcolor: 'secondary.dark'}
+                }}
+              >
+                Tìm kiếm
+              </Button>
+            </Box>
+          </Paper>
+        </Container>
+      </Paper>
+
+      <Container maxWidth="lg">
+        {/* === Quick Browse by Category === */}
+        <Box sx={{ my: {xs:4, md:6}, p: {xs: 2, sm:3}, borderRadius: '16px', bgcolor: theme.palette.background.paper, boxShadow: theme.shadows[2] }}>
+          <SectionHeader icon={<CategoryOutlinedIcon color="primary" />} title="Tìm việc theo ngành nghề" />
+          <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1.5 }}>
             {popularCategories.map((category) => (
               <Chip
                 key={category.value}
                 label={category.label}
-                onClick={() => navigate(`/jobs?category=${category.value}`)}
+                onClick={() => navigate(`/jobs?industry=${category.value}`)} // Changed to 'industry' to match backend
                 clickable
+                variant="outlined"
+                color="primary"
                 sx={{
-                  px: 1,
-                  py: 2.5,
-                  borderRadius: "16px",
-                  fontWeight: 500,
-                  fontSize: "0.9rem",
-                  "&:hover": {
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                  p: 2.5, borderRadius: "20px", fontWeight: 500, fontSize: "0.9rem",
+                  transition: "all 0.2s ease",
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
                     transform: "translateY(-2px)",
-                    transition: "all 0.2s ease",
+                    boxShadow: theme.shadows[3]
                   },
                 }}
-                color="primary"
-                variant="outlined"
               />
             ))}
-            <Chip
-              label="Xem tất cả"
-              onClick={() => navigate(`/jobs`)}
-              clickable
-              color="primary"
-              sx={{
-                px: 1,
-                py: 2.5,
-                borderRadius: "16px",
-                fontWeight: 600,
-                fontSize: "0.9rem",
-                "&:hover": {
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                  transform: "translateY(-2px)",
-                  transition: "all 0.2s ease",
-                },
-              }}
-            />
           </Box>
-        </Card>
+        </Box>
 
         {/* === Featured Jobs Section === */}
-        <Card
-          elevation={2}
-          sx={{
-            my: 5,
-            p: 3,
-            borderRadius: 2,
-            background: "white",
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              mb: 3,
-              flexWrap: "wrap",
-              gap: 2,
-            }}
-          >
-            <Typography
-              variant="h5"
-              component="h2"
-              fontWeight="medium"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-              }}
-            >
-              <WorkIcon color="primary" /> Việc làm mới nhất
-            </Typography>
-
-            <Button
-              variant="outlined"
-              component={RouterLink}
-              to="/jobs"
-              size="small"
-              sx={{
-                borderRadius: "20px",
-                fontWeight: 500,
-              }}
-            >
-              Xem tất cả
-            </Button>
-          </Box>
-
-          <Divider sx={{ mb: 3 }} />
-
+        <Box sx={{ my: {xs:4, md:6}, p: {xs: 2, sm:3}, borderRadius: '16px', bgcolor: theme.palette.background.paper, boxShadow: theme.shadows[2] }}>
+          <SectionHeader icon={<WorkOutlineOutlinedIcon color="primary" />} title="Việc làm mới nhất" onViewAllLink="/jobs" />
           {loadingJobs ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <LoadingSpinner />
-            </Box>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}><LoadingSpinner /></Box>
+          ) : errorJobs ? (
+            <Alert severity="warning" sx={{m:2}}>{errorJobs}</Alert>
           ) : (
             <Grid container spacing={3}>
               {featuredJobs.length > 0 ? (
                 featuredJobs.map((job) => (
-                  <Grid item xs={12} sm={6} md={4} key={job.id || job._id}>
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={job.id || job._id}>
                     <JobCard job={job} />
                   </Grid>
                 ))
               ) : (
-                <Grid item xs={12}>
-                  <Box
-                    sx={{
-                      textAlign: "center",
-                      py: 4,
-                      color: "text.secondary",
-                    }}
-                  >
-                    <Typography sx={{ fontStyle: "italic" }}>Hiện chưa có việc làm nào.</Typography>
-                  </Box>
-                </Grid>
+                <Grid item xs={12}><Typography sx={{ textAlign: "center", py: 4, color: "text.secondary", fontStyle: "italic" }}>Hiện chưa có việc làm nào.</Typography></Grid>
               )}
             </Grid>
           )}
-        </Card>
+        </Box>
 
         {/* === Employer CTA Section === */}
         <Paper
-          elevation={3}
+          elevation={0}
           sx={{
-            p: { xs: 3, md: 5 },
-            my: 5,
-            background: "linear-gradient(135deg, #ff9800 0%, #f57c00 100%)",
-            color: "white",
-            textAlign: "center",
-            borderRadius: 3,
-            position: "relative",
-            overflow: "hidden",
+            p: { xs: 3, md: 6 }, my: {xs:4, md:6},
+            background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.secondary.dark} 100%)`,
+            color: "white", textAlign: "center", borderRadius: '24px', position: "relative", overflow: "hidden",
           }}
         >
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              opacity: 0.1,
-              backgroundImage:
-                'url("https://images.unsplash.com/photo-1552664730-d307ca884978?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80")',
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              zIndex: 0,
-            }}
-          />
-
+            <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.1, backgroundImage: 'url("https://images.unsplash.com/photo-1556761175-5973dc0f32e7?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1932&q=80")', backgroundSize: "cover", backgroundPosition: "center", zIndex: 0 }}/>
           <Box sx={{ position: "relative", zIndex: 1 }}>
-            <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ textShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>
+            <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ textShadow: "0 2px 4px rgba(0,0,0,0.2)", fontSize: {xs: '1.7rem', md: '2.5rem'} }}>
               Dành cho Nhà tuyển dụng
             </Typography>
-
-            <Typography
-              variant="h6"
-              sx={{
-                mb: 4,
-                maxWidth: "800px",
-                mx: "auto",
-                opacity: 0.9,
-              }}
-            >
+            <Typography variant="h6" sx={{ mb: 4, maxWidth: "700px", mx: "auto", opacity: 0.9, fontSize: {xs: '1rem', md: '1.15rem'} }}>
               Đăng tin tuyển dụng và tiếp cận hàng ngàn ứng viên tiềm năng một cách nhanh chóng và hiệu quả.
             </Typography>
-
             <Button
               variant="contained"
               component={RouterLink}
               to="/employer/post-job"
               size="large"
               sx={{
-                bgcolor: "white",
-                color: "#f57c00",
-                fontWeight: "bold",
-                px: 4,
-                py: 1.5,
-                fontSize: "1rem",
-                "&:hover": {
-                  bgcolor: alpha("#fff", 0.9),
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                },
+                bgcolor: "white", color: theme.palette.secondary.dark, fontWeight: "bold",
+                px: 5, py: 1.5, fontSize: "1rem", borderRadius: "12px",
+                '&:hover': { bgcolor: alpha("#fff", 0.9), boxShadow: "0 4px 15px rgba(0,0,0,0.2)"},
               }}
             >
               Đăng tin ngay
@@ -486,103 +389,26 @@ function HomePage() {
         </Paper>
 
         {/* === Featured Companies Section === */}
-        <Card
-          elevation={2}
-          sx={{
-            my: 5,
-            p: 3,
-            borderRadius: 2,
-            background: "white",
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              mb: 3,
-              flexWrap: "wrap",
-              gap: 2,
-            }}
-          >
-            <Typography
-              variant="h5"
-              component="h2"
-              fontWeight="medium"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-              }}
-            >
-              <BusinessIcon color="primary" /> Công ty hàng đầu
-            </Typography>
-
-            <Button
-              variant="outlined"
-              component={RouterLink}
-              to="/companies"
-              size="small"
-              sx={{
-                borderRadius: "20px",
-                fontWeight: 500,
-              }}
-            >
-              Xem tất cả
-            </Button>
-          </Box>
-
-          <Divider sx={{ mb: 3 }} />
-
+        <Box sx={{ my: {xs:4, md:6}, p: {xs: 2, sm:3}, borderRadius: '16px', bgcolor: theme.palette.background.paper, boxShadow: theme.shadows[2] }}>
+          <SectionHeader icon={<BusinessOutlinedIcon color="primary" />} title="Công ty hàng đầu" onViewAllLink="/companies"/>
           {loadingCompanies ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-              <LoadingSpinner />
-            </Box>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}><LoadingSpinner /></Box>
+          ) : errorCompanies ? (
+            <Alert severity="warning" sx={{m:2}}>{errorCompanies}</Alert>
           ) : (
-            <Grid
-              container
-              spacing={3}
-              justifyContent="center"
-              alignItems="center"
-              sx={{
-                mx: "auto",
-                maxWidth: "100%",
-              }}
-            >
+            <Grid container spacing={3}>
               {featuredCompanies.length > 0 ? (
                 featuredCompanies.map((company) => (
-                  <Grid
-                    item
-                    xs={6}
-                    sm={4}
-                    md={2}
-                    key={company.id || company._id}
-                    sx={{
-                      display: "flex",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Box sx={{ width: "100%", maxWidth: "220px" }}>
-                      <CompanyCard company={company} />
-                    </Box>
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={company.id || company._id}>
+                    <CompanyCard company={company} />
                   </Grid>
                 ))
               ) : (
-                <Grid item xs={12}>
-                  <Box
-                    sx={{
-                      textAlign: "center",
-                      py: 4,
-                      color: "text.secondary",
-                    }}
-                  >
-                    <Typography sx={{ fontStyle: "italic" }}>Hiện chưa có thông tin công ty.</Typography>
-                  </Box>
-                </Grid>
+                <Grid item xs={12}><Typography sx={{ textAlign: "center", py: 4, color: "text.secondary", fontStyle: "italic" }}>Hiện chưa có thông tin công ty.</Typography></Grid>
               )}
             </Grid>
           )}
-        </Card>
+        </Box>
       </Container>
     </Box>
   )

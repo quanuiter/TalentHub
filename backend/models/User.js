@@ -69,7 +69,7 @@ const userSchema = new mongoose.Schema({
     uploadedCVs: [cvSchema],
     savedJobs: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Job'
+        ref: 'Job' // Tham chiếu đến Job Model
     }],
 
     // --- Thông tin riêng cho Employer ---
