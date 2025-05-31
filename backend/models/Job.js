@@ -63,8 +63,24 @@ const jobSchema = new mongoose.Schema({
     },
     status: { // Trạng thái tin đăng
         type: String,
-        enum: ['Active', 'Closed', 'Draft', 'Expired'], // Trạng thái có thể có
-        default: 'Active'
+        enum: ['Active', 'Inactive' ,'Pending Approval' ,'Closed', 'Draft', 'Expired'], // Trạng thái có thể có
+        default: 'Pending Approval'
+    },
+    approvalStatus: {
+        type: String,
+        enum: ['Pending', 'Approved', 'Rejected'],
+        default: 'Pending' // Mặc định là chờ duyệt
+    },
+    approvedBy: { // Admin đã duyệt
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    approvedAt: { // Thời gian duyệt
+        type: Date
+    },
+    rejectionReason: { // Lý do từ chối (nếu có)
+        type: String,
+        trim: true
     },
     applicationDeadline: { // Hạn nộp hồ sơ
         type: Date

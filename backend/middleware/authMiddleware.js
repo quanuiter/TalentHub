@@ -17,7 +17,7 @@ const protect = async (req, res, next) => {
 
             // 3. Xác thực token bằng secret key
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+            console.log('[Protect Middleware] Decoded Token Payload:', decoded);
             // 4. Lấy thông tin user từ token và gắn vào request
             // Chúng ta đã lưu userId và role trong payload khi tạo token
             // Gắn payload đã giải mã (chứa userId, role) vào req.user
@@ -53,7 +53,7 @@ const protect = async (req, res, next) => {
 // Middleware để kiểm tra vai trò (ví dụ: chỉ cho phép employer)
 const authorize = (...roles) => { // Nhận danh sách các vai trò được phép
     return (req, res, next) => {
-        // Middleware này phải chạy SAU middleware 'protect' vì nó cần req.user
+        console.log('[Authorize Middleware] Checking role. req.user:', req.user, 'Allowed roles:', roles);
         if (!req.user || !req.user.role) {
             // Trường hợp req.user không được gắn đúng cách (lỗi logic)
              return res.status(403).json({ message: 'Lỗi xác định vai trò người dùng.' });

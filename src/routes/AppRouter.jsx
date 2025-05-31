@@ -4,6 +4,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import DashboardLayout from '../layouts/DashboardLayout'; // <<< Import DashboardLayout
 import ProtectedRoute from './ProtectedRoute'; // <<< Import ProtectedRoute
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography'; // Để debug nếu cần
 
 // Import Pages
 import HomePage from '../pages/HomePage';
@@ -33,6 +35,18 @@ import StatisticsPage from '../pages/employer/StatisticsPage';
 // import StaffManagementPage from '../pages/employer/StaffManagementPage'; // Sẽ xóa ở bước sau
 import CompanyProfilePage from '../pages/employer/CompanyProfilePage';
 import EmployerSettingsPage from '../pages/employer/SettingsPage';
+import AdminManageUsersPage from '../pages/admin/AdminManageUsersPage';
+import AdminApproveJobsPage from '../pages/admin/AdminApproveJobsPage';
+
+const InlineAdminPageTest = () => {
+  console.log('[InlineAdminPageTest] Inline component is rendering inside DashboardLayout!');
+  return (
+    <Box>
+      <Typography variant="h3" color="secondary">Đây là trang Admin Test Nội Tuyến</Typography>
+      <Typography>Nếu bạn thấy dòng này, DashboardLayout và Outlet đang hoạt động.</Typography>
+    </Box>
+  );
+};
 
 function AppRouter() {
   return (
@@ -50,9 +64,20 @@ function AppRouter() {
         {/* Auth Routes (No Layout or different Layout) */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        {/* <Route path="/forgot-password" element={<ForgotPasswordPage />} /> */}
+        {/* === ADMIN ROUTES === */}
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}> {/* Bảo vệ tất cả các route lồng bên trong /admin */}
+          <Route path="/admin" element={<DashboardLayout />}> {/* DashboardLayout là layout chung */}
+            {/* Các trang con của admin sẽ được render bởi <Outlet /> trong DashboardLayout */}
+            <Route path="manage-users" element={<AdminManageUsersPage />} />
+            {/* Thay <InlineAdminPageTest /> bằng <AdminManageUsersPage /> khi bạn đã sửa xong trang đó */}
 
-        {/* === Candidate Protected Routes using DashboardLayout === */}
+            <Route path="approve-jobs" element={<AdminApproveJobsPage />} />
+            {/* Thay <ApproveJobsTestPage /> bằng <AdminApproveJobsPage /> khi bạn đã sửa xong trang đó */}
+
+            {/* Nếu truy cập /admin, tự động chuyển đến /admin/manage-users */}
+            <Route index element={<Navigate to="manage-users" replace />} />
+          </Route>
+        </Route>
         <Route
           path="/candidate"
           element={

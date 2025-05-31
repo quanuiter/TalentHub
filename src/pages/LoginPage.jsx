@@ -52,7 +52,10 @@ function LoginPage() {
   useEffect(() => {
     if (authState.isAuthenticated && authState.user) {
         let targetPath = '/';
-        if (authState.user.role === 'employer') {
+        if (authState.user.role === 'admin') {
+            targetPath = '/admin/manage-users'; // Trang đích cho admin
+        }
+        else if (authState.user.role === 'employer') {
             targetPath = '/employer/dashboard';
         } else if (authState.user.role === 'candidate') {
             targetPath = '/candidate/dashboard';

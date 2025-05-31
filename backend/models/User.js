@@ -1,11 +1,11 @@
 // backend/models/User.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs'); // <<<< THAY ĐỔI Ở ĐÂY
 
 // Định nghĩa cấu trúc cho CV được tải lên (subdocument)
 const cvSchema = new mongoose.Schema({
     fileName: { type: String, required: true },
-    url: { type: String, required: true }, // Đường dẫn lưu trữ file (ví dụ: S3, Cloudinary)
+    url: { type: String, required: true }, 
     uploadDate: { type: Date, default: Date.now }
 });
 
@@ -15,7 +15,7 @@ const educationSchema = new mongoose.Schema({
     degree: { type: String, required: true },
     startYear: { type: Number },
     endYear: { type: Number }
-}, { _id: false });
+}, { _id: true }); // Để _id: true nếu bạn muốn mỗi mục education có _id riêng, hoặc false nếu không. Mặc định là true.
 
 // Định nghĩa cấu trúc cho Kinh nghiệm (subdocument)
 const experienceSchema = new mongoose.Schema({
@@ -24,7 +24,7 @@ const experienceSchema = new mongoose.Schema({
     startDate: { type: String },
     endDate: { type: String },
     description: { type: String }
-}, { _id: false });
+}, { _id: true }); // Để _id: true nếu bạn muốn mỗi mục experience có _id riêng, hoặc false nếu không. Mặc định là true.
 
 
 // --- Định nghĩa Schema chính cho User ---
@@ -51,10 +51,9 @@ const userSchema = new mongoose.Schema({
     role: {
         type: String,
         required: true,
-        enum: ['candidate', 'employer'],
+        enum: ['candidate', 'employer','admin'],
         default: 'candidate'
     },
-    // createdAt & updatedAt sẽ tự động thêm bởi timestamps: true
 
     // --- Thông tin riêng cho Candidate ---
     phone: { type: String, trim: true },
@@ -69,7 +68,7 @@ const userSchema = new mongoose.Schema({
     uploadedCVs: [cvSchema],
     savedJobs: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Job' // Tham chiếu đến Job Model
+        ref: 'Job' 
     }],
 
     // --- Thông tin riêng cho Employer ---
@@ -83,7 +82,7 @@ const userSchema = new mongoose.Schema({
     }
 
 }, {
-    timestamps: true // Tự động thêm createdAt và updatedAt
+    timestamps: true 
 });
 
 // --- Middleware (Hook) để Hash mật khẩu trước khi lưu ---
@@ -105,12 +104,12 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
     try {
         return await bcrypt.compare(candidatePassword, this.password);
     } catch (error) {
-        throw error;
+        // Quan trọng: không nên throw error ở đây mà nên trả về false hoặc để controller xử lý
+        // Vì nếu throw error, nó có thể gây crash server nếu không được bắt đúng cách ở controller
+        console.error('Lỗi khi so sánh mật khẩu:', error);
+        return false; 
     }
 };
 
-// --- Tạo Model từ Schema ---
 const User = mongoose.model('User', userSchema);
-
-// --- Export Model ---
 module.exports = User;

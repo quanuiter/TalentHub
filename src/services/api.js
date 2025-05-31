@@ -76,7 +76,13 @@ export const getNotificationsApi = (params = {}) => apiClient.get('/notification
 export const markNotificationAsReadApi = (notificationId) => apiClient.put(`/notifications/${notificationId}/read`);
 export const markAllNotificationsAsReadApi = () => apiClient.put('/notifications/read-all');
 export const deleteCvApi = (cvId) => apiClient.delete(`/users/profile/cv/${cvId}`);
-
+export const adminGetAllUsers = (params) => apiClient.get('/admin/users', { params });
+// GET /api/admin/jobs/all (hoặc /pending-approval nếu bạn muốn tách biệt)
+export const adminGetAllJobsForAdmin = (params) => apiClient.get('/admin/jobs/all', { params });
+// PUT /api/admin/jobs/approve
+export const adminApproveJobs = (jobIds) => apiClient.put('/admin/jobs/approve', { jobIds });
+// PUT /api/admin/jobs/reject
+export const adminRejectJobs = (data) => apiClient.put('/admin/jobs/reject', data); // data: { jobIds: [], rejectionReason: '...' }
 export default {
     registerApi,
     loginApi,
@@ -113,5 +119,9 @@ export default {
     getNotificationsApi,
     markNotificationAsReadApi,
     markAllNotificationsAsReadApi,
-    deleteCvApi
+    deleteCvApi,
+    adminGetAllUsers,
+    adminGetAllJobsForAdmin,
+    adminApproveJobs,
+    adminRejectJobs
 };

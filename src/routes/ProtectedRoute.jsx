@@ -1,27 +1,37 @@
 // src/routes/ProtectedRoute.jsx
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom'; // Thêm useLocation
 import { useAuth } from '../contexts/AuthContext';
+import LoadingSpinner from '../components/ui/LoadingSpinner'; // Import một component loading
 
-// allowedRoles là mảng các vai trò được phép truy cập (ví dụ: ['candidate'], ['employer'], ['admin'])
 const ProtectedRoute = ({ allowedRoles }) => {
   const { authState } = useAuth();
+  const location = useLocation(); // Lấy vị trí hiện tại
 
+  console.log('[ProtectedRoute] Evaluating access. AuthState:', JSON.stringify(authState, null, 2));
+
+  // 1. Nếu AuthContext vẫn đang tải, hiển thị một chỉ báo loading
+  if (authState.isLoading) {
+    console.log('[ProtectedRoute] Auth is loading. Showing LoadingSpinner.');
+    return <LoadingSpinner />; // Hoặc bất kỳ component loading nào khác
+  }
+
+  // 2. Nếu không được xác thực (sau khi đã tải xong), chuyển hướng đến trang login
   if (!authState.isAuthenticated) {
-    // Nếu chưa đăng nhập, chuyển hướng về trang login
-    // Có thể truyền state để trang login biết lý do chuyển hướng (ví dụ: ?redirect=/candidate/dashboard)
-    return <Navigate to="/login" replace />;
+    console.log('[ProtectedRoute] Not authenticated. Redirecting to login.');
+    // Truyền vị trí hiện tại để chuyển hướng lại sau khi đăng nhập
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // 3. Nếu đã xác thực nhưng vai trò không được phép, chuyển hướng về trang chủ hoặc trang không có quyền
   if (allowedRoles && !allowedRoles.includes(authState.user?.role)) {
-    // Nếu đã đăng nhập nhưng không đúng vai trò được phép
-    // Có thể chuyển hướng về trang chủ hoặc trang báo lỗi "Unauthorized"
-    console.warn(`User role '${authState.user?.role}' not allowed for this route. Allowed: ${allowedRoles}`);
-    return <Navigate to="/" replace />; // Tạm về trang chủ
+    console.warn(`[ProtectedRoute] User role '${authState.user?.role}' not allowed. Allowed: ${allowedRoles}. Redirecting to home.`);
+    return <Navigate to="/" replace />; // Tạm thời về trang chủ
   }
 
-  // Nếu đã đăng nhập và đúng vai trò (hoặc không yêu cầu vai trò cụ thể), cho phép truy cập
-  return <Outlet />; // Render component con của route được bảo vệ
+  // 4. Nếu đã xác thực và vai trò được phép (hoặc không yêu cầu vai trò cụ thể), render route con
+  console.log('[ProtectedRoute] Access GRANTED.');
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

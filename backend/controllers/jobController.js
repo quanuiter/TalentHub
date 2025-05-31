@@ -67,7 +67,7 @@ exports.createJob = async (req, res) => {
             numberOfHires: parseInt(numberOfHires, 10) || 1,
             applicationDeadline: applicationDeadline || null,
             associatedTests: Array.isArray(associatedTestIds) ? associatedTestIds : [],
-            status: 'Active'
+            //status: 'Active'
         };
 
         console.log('--- Creating new Job with data ---');
@@ -272,23 +272,58 @@ exports.updateJob = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(jobId)) {
             return res.status(400).json({ message: 'ID công việc không hợp lệ.' });
         }
+
         const job = await Job.findById(jobId);
         if (!job) {
             return res.status(404).json({ message: 'Không tìm thấy công việc.' });
         }
+
         if (job.postedBy.toString() !== userId) {
             return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa tin tuyển dụng này.' });
         }
+
+        // >>> THÊM KIỂM TRA APPROVAL STATUS Ở ĐÂY <<<
+        if (job.approvalStatus === 'Pending') {
+            // Nếu công việc đang chờ duyệt, không cho phép nhà tuyển dụng thay đổi status (khóa/mở)
+            if (updates.hasOwnProperty('status')) {
+                return res.status(403).json({ message: 'Công việc đang chờ phê duyệt. Bạn không thể thay đổi trạng thái (khóa/mở) vào lúc này.' });
+            }
+            // Bạn cũng có thể hạn chế các trường khác nếu cần, ví dụ: không cho sửa title, description khi đang chờ duyệt
+            // delete updates.title;
+            // delete updates.description;
+        } else if (job.approvalStatus === 'Rejected') {
+            // Nếu công việc đã bị từ chối, có thể cũng không cho phép thay đổi status
+             if (updates.hasOwnProperty('status')) {
+                return res.status(403).json({ message: 'Công việc này đã bị từ chối. Bạn không thể thay đổi trạng thái (khóa/mở).' });
+            }
+        }
+
+
+        // Nhà tuyển dụng không được tự ý thay đổi các trường này qua hàm updateJob thông thường
+        delete updates.approvalStatus;
+        delete updates.approvedBy;
+        delete updates.approvedAt;
+        delete updates.rejectionReason;
+
+        // Giữ lại companyName và companyId từ job gốc, không cho phép cập nhật qua đây
         updates.companyName = job.companyName;
         updates.companyId = job.companyId;
 
+
         const updatedJob = await Job.findByIdAndUpdate(jobId, updates, { new: true, runValidators: true });
+
+        if (!updatedJob) {
+            // Trường hợp này ít xảy ra nếu job.findById(jobId) ở trên đã thành công
+            return res.status(404).json({ message: 'Không tìm thấy công việc sau khi cập nhật.' });
+        }
+
         res.status(200).json({ message: 'Cập nhật tin tuyển dụng thành công!', job: updatedJob });
+
     } catch (error) {
         console.error("Update Job Error:", error);
         if (error.name === 'ValidationError') {
             const messages = Object.values(error.errors).map(val => val.message);
-            return res.status(400).json({ message: messages.join('. ') });
+            return res.status(400).json({ message: `Lỗi validation: ${messages.join('. ')}` });
         }
         res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật tin tuyển dụng.' });
     }
